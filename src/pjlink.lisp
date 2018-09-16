@@ -93,6 +93,18 @@
     :initform (error "Must supply is-on")
     :accessor is-on)))
 
+(defclass %input-info ()
+  ((%type
+    :type keyword
+    :initarg :type
+    :initform (error "Must supply type")
+    :accessor input-type)
+   (%number
+    :type integer
+    :initarg :number
+    :initform (error "Must supply number")
+    :accessor input-number)))
+
 (defun %encrypt-password (password seed &key (seed-start 0))
   "Create the authentication response given `password` and `seed`.
 `password` should be a string length 32 or less
@@ -273,6 +285,26 @@ eg
                     (#\1 t))
     :collecting (make-instance '%lamp-info :number lamp-number :hours hours :is-on is-on)))
 
+(defun %inst-str->input-infos (inst-str)
+  "Parses a inst string into a list of `input-info`'s
+`inst-str` should be a string where each input is represented by
+
+  <Type><Number>
+
+Additional inputs are separated by spaces.
+
+eg
+  11 2Z 3E"
+  (loop
+    :with idx := 0
+    :while (< idx (length inst-str))
+    :for valid := (or (zerop idx)
+                      (char= (char inst-str (1- (incf idx))) #\Space)
+                      (error "Malformed inst string"))
+    :for type := (%input->sym (char inst-str (1- (incf idx))))
+    :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
+    :collecting (make-instance '%input-info :type type :number number)))
+
 (defun %pjlink-get-impl (stream digest class command)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
@@ -369,7 +401,7 @@ returns the string \"0\""
   (%lamp-str->lamp-infos (%pjlink-get connection #\1 "LAMP")))
 
 (defun pjlink-inst? (connection)
-  (%pjlink-get connection #\1 "INST"))
+  (%inst-str->input-infos (%pjlink-get connection #\1 "INST")))
 
 (defun pjlink-name? (connection)
   (%pjlink-get connection #\1 "NAME"))
