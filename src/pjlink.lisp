@@ -44,7 +44,7 @@
     :initform (error "Must supply class")
     :reader %class)))
 
-(defclass error-status ()
+(defclass %error-status ()
   ((%fan-status
     :type keyword
     :initarg :fan
@@ -311,7 +311,7 @@ returns the string \"0\""
 (defun pjlink-erst? (connection)
   (let ((result (%pjlink-get connection #\1 "ERST")))
     (make-instance
-     'error-status
+     '%error-status
      :fan (%erst->sym (char result 0))
      :lamp (%erst->sym (char result 1))
      :temperature (%erst->sym (char result 2))
