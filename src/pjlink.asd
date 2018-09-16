@@ -2,7 +2,7 @@
   :version "0.0.0"
   :description ""
   :author "Wilfredo Velázquez-Rodríguez <zulu.inuoe@gmail.com>"
-  :license "MIT"
+  :license "CC0 1.0 Universal"
   :serial t
   :components
   ((:static-file "qlfile")
