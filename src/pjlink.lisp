@@ -76,6 +76,23 @@
     :initform (error "Must supply other status")
     :accessor other-status)))
 
+(defclass %lamp-info ()
+  ((%number
+    :type integer
+    :initarg :number
+    :initform (error "Must supply number")
+    :accessor lamp-number)
+   (%hours
+    :type integer
+    :initarg :hours
+    :initform (error "Must supply hours")
+    :accessor hours)
+   (%is-on
+    :type boolean
+    :initarg :is-on
+    :initform (error "Must supply is-on")
+    :accessor is-on)))
+
 (defun %encrypt-password (password seed &key (seed-start 0))
   "Create the authentication response given `password` and `seed`.
 `password` should be a string length 32 or less
@@ -228,6 +245,34 @@ eg.
     (#\1 :warning)
     (#\2 :error)))
 
+(defun %lamp-str->lamp-infos (lamps-str)
+  "Parses a lamp string into a list of `lamp-info`'s
+`lamps-str` should be a string where each lamp is represented by
+
+  <Hours> SPC <OnOrOff>
+
+Additional lamps are separated by spaces.
+
+eg
+  8262 1 13451 1 198 0"
+  (loop
+    :with idx := 0
+    :while (< idx (length lamps-str))
+    :for lamp-number :from 0 :by 1
+    :for valid := (or (zerop idx)
+                      (char= (char lamps-str (1- (incf idx))) #\Space)
+                      (error "Malformed lamp string"))
+    :for hours :=
+               (loop
+                 :with start := idx
+                 :until (char= (char lamps-str (1- (incf idx))) #\Space)
+                 :finally
+                    (return (parse-integer lamps-str :start start :end (1- idx) :radix 10)))
+    :for is-on := (ecase (char lamps-str (1- (incf idx)))
+                    (#\0 nil)
+                    (#\1 t))
+    :collecting (make-instance '%lamp-info :number lamp-number :hours hours :is-on is-on)))
+
 (defun %pjlink-get-impl (stream digest class command)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
@@ -321,7 +366,7 @@ returns the string \"0\""
 
 (defun pjlink-lamp? (connection)
   ;;Each lamp is returned as a pair of "<hour> SPC <status>" ordered by lamp number
-  (%pjlink-get connection #\1 "LAMP"))
+  (%lamp-str->lamp-infos (%pjlink-get connection #\1 "LAMP")))
 
 (defun pjlink-inst? (connection)
   (%pjlink-get connection #\1 "INST"))
