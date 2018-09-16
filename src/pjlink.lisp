@@ -346,8 +346,8 @@ returns the string \"0\""
 
 (defun pjlink-inpt? (connection)
   (let ((result (%pjlink-get connection #\1 "INPT")))
-    (values (%input->sym (aref result 0))
-            (parse-integer (string (code-char (aref result 1))) :radix 36))))
+    (values (%input->sym (char result 0))
+            (parse-integer result :start 1 :end 2 :radix 36))))
 
 (defun pjlink-avmt? (connection)
   (let ((result (%pjlink-get connection #\1 "AVMT")))
