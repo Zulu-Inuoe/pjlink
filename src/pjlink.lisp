@@ -321,25 +321,25 @@ Then given a result of
 returns the string \"0\""
   (%with-command-buffer-impl (out digest class command "?")
     (write-sequence out stream)
-    (finish-output stream)
-    (%with-response-buffer in
-      ;;Get the response params
-      (let* ((rlen (%read-pjlink-command-line in stream))
-             (param-len (%validate-get-result class command in rlen)))
-        (unless (null param-len)
-          (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 9))
-            (error
-             (ecase (char in 10)
-               (#\1 "Undefined command")
-               (#\3 "Unavailable time")
-               (#\4 "Projector/Display failure")
-               ((#\a #\A) "Authentication error"))))
-          (subseq in 7 (+ 7 param-len)))))))
+    (finish-output stream))
+  (%with-response-buffer in
+    ;;Get the response params
+    (let* ((rlen (%read-pjlink-command-line in stream))
+           (param-len (%validate-get-result class command in rlen)))
+      (unless (null param-len)
+        (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
+          (error
+           (ecase (char in 10)
+             (#\1 "Undefined command")
+             (#\3 "Unavailable time")
+             (#\4 "Projector/Display failure")
+             ((#\a #\A) "Authentication error"))))
+        (subseq in 7 (+ 7 param-len))))))
 
 (defun %pjlink-clss?-impl (stream digest)
   "Lower level CLSS query used during initialization to verify authentication and device class."
   (let ((result (%pjlink-get-impl stream digest #\1 "CLSS")))
-    (aref result 0)))
+    (values (parse-integer result :radix 36))))
 
 (defun %pjlink-get (connection class command
                     &aux (stream (usocket:socket-stream (%socket connection))))
@@ -417,4 +417,4 @@ returns the string \"0\""
 
 (defun pjlink-clss? (connection)
   (let ((result (%pjlink-get connection #\1 "CLSS")))
-    (values (parse-integer (string (char result 0)) :radix 16))))
+    (values (parse-integer result :radix 16))))
