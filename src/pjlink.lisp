@@ -244,12 +244,31 @@ eg.
     (#\4 :storage)
     (#\5 :network)))
 
+(defun %input->string (input-type input-number)
+  (unless (<= 1 input-number 9)
+    (error "Invalid input number '~A'" input-number))
+  (format nil "~A~D"
+          (ecase input-type
+            (:rgb #\1)
+            (:video #\2)
+            (:digital #\3)
+            (:storage #\4)
+            (:network #\5))
+          input-number))
+
 (defun %avmt->sym (response)
   (eswitch (response :test #'string-equal)
     ("11" :vm-on)
     ("21" :am-on)
     ("31" :avm-on)
     ("30" :avm-off)))
+
+(defun %avmt->string (avmt)
+  (ecase avmt
+    (:vm-on "11")
+    (:am-on "21")
+    (:avm-on "31")
+    (:avm-off "30")))
 
 (defun %erst->sym (erst)
   (ecase erst
@@ -346,6 +365,45 @@ returns the string \"0\""
   "See `%pjlink-get-impl`. This is a convenience function taking in a connection instead."
   (%pjlink-get-impl stream (%digest connection) class command))
 
+(defun %pjlink-set (connection class command params
+                    &aux
+                      (stream (usocket:socket-stream (%socket connection)))
+                      (digest (%digest connection)))
+  "Conducts a `set` command on `stream`, and returns the result string
+uses
+ `digest` as the authorization digest
+ `class` as the command class
+ `command` as the command name
+ `params` as the string params to send
+
+
+This will issue a query such as
+  %1POWR 1
+
+Then given a result of
+  %1POWR=OK
+will return no values.
+Will error on error responses such as ERR1, ERRA, ERR3 etc."
+  (%with-command-buffer-impl (out digest class command params)
+    (write-sequence out stream)
+    (finish-output stream))
+  (%with-response-buffer in
+    ;;Get the response params
+    (let* ((rlen (%read-pjlink-command-line in stream))
+           (param-len (%validate-get-result class command in rlen)))
+      (unless param-len
+        (error "Bad set response: ~A" (subseq in rlen)))
+      (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
+        (error
+         (ecase (char in 10)
+           (#\1 "Undefined command")
+           (#\3 "Unavailable time")
+           (#\4 "Projector/Display failure")
+           ((#\a #\A) "Authentication error"))))
+      (unless (and (= param-len 2) (string-equal in "OK" :start1 7 :end1 9))
+        (error "Set '~A' failed with response '~A'" command (subseq in 7 (+ 7 param-len))))
+      (values))))
+
 (defun pjlink-connect (host
                        &key
                          (port +pjlink-port+)
@@ -372,14 +430,24 @@ returns the string \"0\""
            (class (%pjlink-clss?-impl stream digest)))
       (make-instance '%pjlink-connection :socket socket :digest digest :class class))))
 
+(defun pjlink-powr (connection power-on)
+  (%pjlink-set connection #\1 "POWR" (if power-on "1" "0")))
+
 (defun pjlink-powr? (connection)
   (let ((result (%pjlink-get connection #\1 "POWR")))
     (%powr->sym (char result 0))))
 
+(defun pjlink-inpt (connection input-type input-number)
+  (let ((input-str (%input->string input-type input-number)))
+    (%pjlink-set connection #\1 "INPT" input-str)))
+
 (defun pjlink-inpt? (connection)
   (let ((result (%pjlink-get connection #\1 "INPT")))
     (values (%input->sym (char result 0))
-            (parse-integer result :start 1 :end 2 :radix 36))))
+            (parse-integer result :start 1 :end 2 :radix 10))))
+
+(defun pjlink-avmt (connection avmt)
+  (%pjlink-set connection #\1 "AVMT" (%avmt->string avmt)))
 
 (defun pjlink-avmt? (connection)
   (let ((result (%pjlink-get connection #\1 "AVMT")))
