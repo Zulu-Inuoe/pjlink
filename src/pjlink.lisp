@@ -9,7 +9,7 @@
 ;;;  +--------------+---------+---------------+--------------------+----------------+
 ;;;
 ;;; Example command (in ASCII)
-;;;  `%1POWR 1`
+;;;  `%1POWR 1
 ;;;
 
 ;;;
@@ -22,7 +22,7 @@
 ;;;
 ;;; Example response (in ASCII)
 ;;;
-;;;  `%1POWR=OK`
+;;;  `%1POWR=OK
 ;;;
 
 (defconstant +pjlink-port+ 4352)
