@@ -25,141 +25,190 @@
 ;;;  `%1POWR=OK
 ;;;
 
-(defconstant +pjlink-port+ 4352)
+(defconstant +pjlink-port+ 4352
+  "Default PJLink port.")
+
+(deftype hostname ()
+  "A valid hostname for a projector or local inteface."
+  '(or
+    string ;;IPv4 or IPv6
+    (or (vector t 4) (array (unsigned-byte 8) (4))) ;;IPv4
+    (or (vector t 16) (array (unsigned-byte 8) (16))) ;;IPv6
+    integer ;;IPv4
+    null))
+
+(defclass pjlink-config ()
+  ((%host
+    :type hostname
+    :initarg :host
+    :initform #(127 0 0 1)
+    :accessor host)
+   (%port
+    :type integer
+    :initarg :port
+    :initform +pjlink-port+
+    :accessor port)
+   (%password
+    :type (or null sequence)
+    :initarg :password
+    :initform nil
+    :accessor password)
+   (%local-host
+    :type hostname
+    :initarg :local-host
+    :initform nil
+    :accessor local-host)
+   (%local-port
+    :type hostname
+    :initarg :local-port
+    :initform nil
+    :accessor local-port))
+  (:documentation
+   "Holds configuration for connecting with a PJLink projector
+  host - host to connect to
+  port - port to connect to
+  password to use (unused if authentication disabled)
+  local-host - Local interface to use
+  local-port - Local port to use"))
 
 (deftype power-status ()
   "Power status of a projector.
-see `powr?'"
+see `power-on', `power-off', and `get-power-status'"
   '(member :standby :lamp-on :cooling :warm-up))
 
 (deftype input-type ()
   "An input type for a projector.
 Note that a projector may have several inputs of the same type, identified by an `input-number`
-see `inpt?' and `inst?'"
+see `get-input', `set-input', and `get-inputs'"
   '(member :rgb :video :digital :storage :network))
 
-(deftype avmt-status ()
-  "Status of the audio-video mute setting on a projector.
-Audio-video mute will cease output of audio or video, without powering off the projector.
-see `avmt' and `avmt?'"
-  '(member :vm-on :am-on :avm-on :avm-off))
-
-(deftype error-status ()
-  "Status of a component of a projector.
-see `erst'"
-  '(member :ok :warning :error))
-
-(defclass %pjlink-connection ()
-  ((%socket
-    :type usocket:socket
-    :initarg :socket
-    :initform (error "Must supply socket")
-    :reader %socket)
-   (%digest
-    :type (or null (simple-array character 32))
-    :initarg :digest
-    :initform (error "Must supply digest")
-    :reader %digest)
-   (%class
-    :type integer
-    :initarg :class
-    :initform (error "Must supply class")
-    :reader %class)))
-
-(defclass %error-status ()
-  ((%fan-status
-    :type error-status
-    :initarg :fan
-    :initform (error "Must supply fan status")
-    :accessor fan-status)
-   (%lamp-status
-    :type error-status
-    :initarg :lamp
-    :initform (error "Must supply lamp status")
-    :accessor lamp-status)
-   (%temperature-status
-    :type error-status
-    :initarg :temperature
-    :initform (error "Must supply temperature status")
-    :accessor temperature-status)
-   (%cover-open-status
-    :type error-status
-    :initarg :cover-open
-    :initform (error "Must supply cover-open status")
-    :accessor cover-open-status)
-   (%filter-status
-    :type error-status
-    :initarg :filter
-    :initform (error "Must supply filter status")
-    :accessor filter-status)
-   (%other-status
-    :type error-status
-    :initarg :other
-    :initform (error "Must supply other status")
-    :accessor other-status)))
-
-(defclass %input-info ()
+(defclass projector-input ()
   ((%type
     :type input-type
     :initarg :type
     :initform (error "Must supply type")
-    :accessor input-type)
+    :reader input-type)
    (%number
     :type (integer 1 9)
     :initarg :number
     :initform (error "Must supply number")
-    :accessor input-number)))
+    :reader input-number))
+  (:documentation
+   "An available input for a projector.
+Note that projectors may have multiple inputs of the same type, differentiated by number.
+Note that projector input numbers start at 1, not 0."))
 
-(defclass %lamp-info ()
+(deftype av-mute-status ()
+  "Status of the audio-video mute setting on a projector.
+Audio-video mute will cease output of audio or video, without powering off the projector.
+see `get-av-mute'
+see `set-av-mute'"
+  '(member :vm-on :am-on :avm-on :avm-off))
+
+(deftype error-status ()
+  "Status of a component of a projector.
+see `get-error-status'
+see `projector-status'"
+  '(member :ok :warning :error))
+
+(defclass projector-status ()
+  ((%fan-status
+    :type error-status
+    :initarg :fan
+    :initform (error "Must supply fan status")
+    :reader fan-status)
+   (%lamp-status
+    :type error-status
+    :initarg :lamp
+    :initform (error "Must supply lamp status")
+    :reader lamp-status)
+   (%temperature-status
+    :type error-status
+    :initarg :temperature
+    :initform (error "Must supply temperature status")
+    :reader temperature-status)
+   (%cover-open-status
+    :type error-status
+    :initarg :cover-open
+    :initform (error "Must supply cover-open status")
+    :reader cover-open-status)
+   (%filter-status
+    :type error-status
+    :initarg :filter
+    :initform (error "Must supply filter status")
+    :reader filter-status)
+   (%other-status
+    :type error-status
+    :initarg :other
+    :initform (error "Must supply other status")
+    :reader other-status))
+  (:documentation
+   "The status of projector components."))
+
+(defclass projector-lamp ()
   ((%number
     :type (integer 0 8)
     :initarg :number
     :initform (error "Must supply number")
-    :accessor lamp-number)
+    :reader lamp-number)
    (%hours
     :type (integer 0 99999)
     :initarg :hours
     :initform (error "Must supply hours")
-    :accessor lamp-hours)
+    :reader lamp-hours)
    (%is-on
     :type boolean
     :initarg :is-on
     :initform (error "Must supply is-on")
-    :accessor lamp-is-on)))
+    :reader lamp-is-on)))
 
-(defun %encrypt-password (password seed &key (seed-start 0))
-  "Create the authentication response given `password` and `seed`.
-`password` should be a string length 32 or less
-`seed` should be a string, length 8
-`seed-start` denotes where to offset `seed`. 8 characters will be read from that offset."
-  (unless (<= (length password) 32)
-    (error "Password length too long"))
+(defun %nibble->hex (nibble)
+  "Convert a nibble into its hex char."
+  (ecase nibble
+    (0 #\0)
+    (1 #\1)
+    (2 #\2)
+    (3 #\3)
+    (4 #\4)
+    (5 #\5)
+    (6 #\6)
+    (7 #\7)
+    (8 #\8)
+    (9 #\9)
+    (10 #\a)
+    (11 #\b)
+    (12 #\c)
+    (13 #\d)
+    (14 #\e)
+    (15 #\f)))
+
+(defun %md5->hex-str (md5)
+  "Convert a 16-octet md5 hash into a 32-char hex-encoded string."
+  (loop
+    :with hex-digest := (make-array 32 :element-type 'character)
+    :for nidx :from 0 :below 16
+    :for hidx :from 0 :below 32 :by 2
+    :do
+       (setf (char hex-digest hidx) (%nibble->hex (ash (logand #xF0 (aref md5 nidx)) -4))
+             (char hex-digest (1+ hidx)) (%nibble->hex (logand #x0F (aref md5 nidx))))
+    :finally
+    (return hex-digest)))
+
+(defun %encrypt-password (connection-response password plen)
+  "Create a PJLink authentication digest from `connection-response' and `password'
+`connection-response' should be a sequence like
+PJLINK 1 <SEED>
+And password a sequence of characters length 32 or less."
   (let ((buffer (make-array 40 :element-type 'character)))
     (declare (dynamic-extent buffer))
-    (replace buffer seed :start2 seed-start :end2 (+ seed-start 8))
-    (replace buffer password :start1 8)
-    (let ((md5 (md5:md5sum-string buffer :end (+ 8 (length password)))))
-      ;;We need to convert the md5 into a hex string
-      (with-output-to-string (str)
-        (loop
-          :for b :across md5
-          :do (format str "~(~2,'0X~)" b))))))
+    (replace buffer connection-response :start2 9 :end2 17)
+    (replace buffer password :start1 8 :end2 plen)
+    (values (%md5->hex-str (md5:md5sum-string buffer :end (+ 8 plen))))))
 
-(defun %coerce-password (password
-                         &aux
-                           (password (if (functionp password) (funcall password) password)))
-  "Coerces a password into a string`
-`password` can be a string, or a function of no arguments which returns a string."
-  (etypecase password
-    (string
-     (unless (<= (length password) 32)
-       (error "Password length too long"))
-     password)))
-
-(defun %verify-connect-response (response)
+(defun %verify-connect-response (response rlen)
   "Verifies the initial connection response.
 Returns nil if the response does not match a proper pjlink connection response."
-  (and (>= (length response) 8)
+  (and (>= rlen 8)
        (string-equal response "PJLINK " :end1 7)
        (or
         ;; Authentication disabled
@@ -167,7 +216,7 @@ Returns nil if the response does not match a proper pjlink connection response."
         ;; Authentication enabled. Expect seed
         (and (char= (char response 7) #\1)
              (char= (char response 8) #\Space)
-             (>= (length response) 17)))))
+             (>= rlen 17)))))
 
 (defun %create-digest (connection-response password)
   "Creates a digest string from a connection response and a password.
@@ -180,8 +229,11 @@ Otherwise calculates the response by prepending the seed from the connection res
   (ecase (char connection-response 7)
     (#\0 "") ; No authentication. Empty digest
     (#\1
-     ;;Authentication
-     (%encrypt-password (%coerce-password password) connection-response :seed-start 9))))
+     (let ((plen (length password)))
+       (unless (<= plen 32)
+         (error "Password length too long (~D)" plen))
+       ;;Authentication
+       (%encrypt-password connection-response password plen)))))
 
 (defun %read-pjlink-command-line (buffer stream)
   "Reads a pjlink command-line (delimited by #\Return) from `stream` into `buffer`"
@@ -194,16 +246,7 @@ Otherwise calculates the response by prepending the seed from the connection res
     :finally
     (return i)))
 
-(defmacro %with-command-buffer ((buffer connection class command params) &body body)
-  "Create a buffer pre-filled with a PJLink command using `class`, `command` and `params`
-eg.
-  %1CLSS ?<Return>
-
-When authentication is enabled, also prepends the `connection`'s digest string."
-  `(%with-command-buffer-impl (,buffer (%digest ,connection) ,class ,command ,params)
-     ,@body))
-
-(defmacro %with-command-buffer-impl ((buffer digest class command params) &body body)
+(defmacro %with-command-buffer ((buffer digest class command params) &body body)
     "Create a buffer pre-filled with a PJLink command using `digest`, `class`, `command` and `params`
 eg.
   %1CLSS ?<Return>"
@@ -221,7 +264,7 @@ eg.
 
        ;;Add %1
        (setf (char ,buffer (1- (incf ,idx))) #\%
-             (char ,buffer (1- (incf ,idx))) ,class-sym)
+             (char ,buffer (1- (incf ,idx))) (code-char (+ (char-code #\0) ,class-sym)))
 
        ;;Add command type
        (replace ,buffer ,command-sym :start1 ,idx)
@@ -246,7 +289,7 @@ eg.
 (defun %validate-get-result (class command response len)
   (and (>= len 8)
        (char= (char response 0) #\%)
-       (char= (char response 1) class)
+       (char= (char response 1) (code-char (+ (char-code #\0) class)))
        (string-equal response command :start1 2 :end1 6)
        (char= (char response 6) #\=)
        (- len 7)))
@@ -324,7 +367,7 @@ eg
     :for is-on := (ecase (char lamps-str (1- (incf idx)))
                     (#\0 nil)
                     (#\1 t))
-    :collecting (make-instance '%lamp-info :number lamp-number :hours hours :is-on is-on)))
+    :collecting (make-instance 'projector-lamp :number lamp-number :hours hours :is-on is-on)))
 
 (defun %inst-str->input-infos (inst-str)
   "Parses a inst string into a list of `input-info`'s
@@ -344,9 +387,9 @@ eg
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
-    :collecting (make-instance '%input-info :type type :number number)))
+    :collecting (make-instance 'projector-input :type type :number number)))
 
-(defun %pjlink-get-impl (stream digest class command)
+(defun %pjlink-get (stream digest class command)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
@@ -360,37 +403,28 @@ This will issue a query such as
 Then given a result of
   %1POWR=0
 returns the string \"0\""
-  (%with-command-buffer-impl (out digest class command "?")
+  (%with-command-buffer (out digest class command "?")
     (write-sequence out stream)
     (finish-output stream))
   (%with-response-buffer in
     ;;Get the response params
     (let* ((rlen (%read-pjlink-command-line in stream))
            (param-len (%validate-get-result class command in rlen)))
-      (unless (null param-len)
-        (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
-          (error
-           (ecase (char in 10)
-             (#\1 "Undefined command")
-             (#\3 "Unavailable time")
-             (#\4 "Projector/Display failure")
-             ((#\a #\A) "Authentication error"))))
-        (subseq in 7 (+ 7 param-len))))))
+      (unless param-len
+        (if (string-equal in "PJLINK ERRA" :end1 rlen)
+            (error "Authentication error")
+            (error "Bad get response: '~A'" (subseq in 0 rlen))))
+      (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
+        (error
+         (format nil "get '~A'(~D): ~A" command class
+                 (ecase (char in 10)
+                   (#\1 "Undefined command")
+                   (#\2 "Out of parameter")
+                   (#\3 "Unavailable time")
+                   (#\4 "Projector/Display failure")))))
+      (subseq in 7 (+ 7 param-len)))))
 
-(defun %pjlink-clss?-impl (stream digest)
-  "Lower level CLSS query used during initialization to verify authentication and device class."
-  (let ((result (%pjlink-get-impl stream digest #\1 "CLSS")))
-    (values (parse-integer result :radix 36))))
-
-(defun %pjlink-get (connection class command
-                    &aux (stream (usocket:socket-stream (%socket connection))))
-  "See `%pjlink-get-impl`. This is a convenience function taking in a connection instead."
-  (%pjlink-get-impl stream (%digest connection) class command))
-
-(defun %pjlink-set (connection class command params
-                    &aux
-                      (stream (usocket:socket-stream (%socket connection)))
-                      (digest (%digest connection)))
+(defun %pjlink-set (stream digest class command params)
   "Conducts a `set` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
@@ -406,7 +440,7 @@ Then given a result of
   %1POWR=OK
 will return no values.
 Will error on error responses such as ERR1, ERRA, ERR3 etc."
-  (%with-command-buffer-impl (out digest class command params)
+  (%with-command-buffer (out digest class command params)
     (write-sequence out stream)
     (finish-output stream))
   (%with-response-buffer in
@@ -414,124 +448,184 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
     (let* ((rlen (%read-pjlink-command-line in stream))
            (param-len (%validate-get-result class command in rlen)))
       (unless param-len
-        (error "Bad set response: ~A" (subseq in rlen)))
+        (if (string-equal in "PJLINK ERRA" :end1 rlen)
+            (error "Authentication error")
+            (error "Bad set response: '~A'" (subseq in 0 rlen))))
       (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
         (error
-         (ecase (char in 10)
-           (#\1 "Undefined command")
-           (#\3 "Unavailable time")
-           (#\4 "Projector/Display failure")
-           ((#\a #\A) "Authentication error"))))
+         (format nil "set '~A'(~D) '~A': ~A" command class params
+                 (ecase (char in 10)
+                   (#\1 "Undefined command")
+                   (#\2 "Out of parameter")
+                   (#\3 "Unavailable time")
+                   (#\4 "Projector/Display failure")))))
       (unless (and (= param-len 2) (string-equal in "OK" :start1 7 :end1 9))
-        (error "Set '~A' failed with response '~A'" command (subseq in 7 (+ 7 param-len))))
+        (error "set '~A' failed with response '~A'" command (subseq in 7 (+ 7 param-len))))
       (values))))
 
-(defun pjlink-connect (host
-                       &key
-                         (port +pjlink-port+)
-                         (password nil)
-                         (local-host nil)
-                         (local-port nil))
-  "Open a PJLink connection to `host`.
-  `port` specifies the port to use. defaults to pjlink port 4352
-  `password` will be used if the host requires authentication
-  `local-host` allows specifying a different local host to use (interface device)
-  `local-port` allows specifying a specific local port to use"
-  (let* ((socket (usocket:socket-connect host port
-                                         :element-type 'character
-                                         :local-host local-host
-                                         :local-port local-port))
-         (buffer (make-array 18 :element-type 'character))
-         (stream (usocket:socket-stream socket)))
+(defun %read-line-and-generate-digest (stream password)
+  ;;Read the initial connection line and figure out the digest to use
+  (let ((buffer (make-array 18 :element-type 'character)))
     (declare (dynamic-extent buffer))
-    (%read-pjlink-command-line buffer stream)
-    (unless (%verify-connect-response buffer)
-      (error "Invalid response ~A" buffer))
+    (let ((rlen (%read-pjlink-command-line buffer stream)))
+      (unless (%verify-connect-response buffer rlen)
+        (error "Invalid response '~A'" (subseq buffer 0 rlen)))
+      (%create-digest buffer password))))
 
-    (let* ((digest (%create-digest buffer password))
-           (class (%pjlink-clss?-impl stream digest)))
-      (make-instance '%pjlink-connection :socket socket :digest digest :class class))))
+(defmacro %with-pjlink-connection ((stream-var digest-var)
+                                   (host
+                                    &key
+                                      (port +pjlink-port+)
+                                      (password nil)
+                                      (local-host nil)
+                                      (local-port nil))
+                                   &body body)
+  (with-gensyms (host-sym port-sym password-sym local-host-sym local-port-sym
+                          socket)
+    `(let* ((,host-sym ,host)
+            (,port-sym ,port)
+            (,password-sym ,password)
+            (,local-host-sym ,local-host)
+            (,local-port-sym ,local-port)
+            (,socket (usocket:socket-connect ,host-sym ,port-sym
+                                             :element-type 'character
+                                             :local-host ,local-host-sym
+                                             :local-port ,local-port-sym)))
+       (unwind-protect
+            (let* ((,stream-var (usocket:socket-stream ,socket))
+                   (,digest-var (%read-line-and-generate-digest ,stream-var ,password-sym)))
+              ,@body)
+         (usocket:socket-close ,socket)))))
 
-(defun pjlink-powr (connection power-on)
-  "Instruct the projector to power on, or off."
-  (%pjlink-set connection #\1 "POWR" (if power-on "1" "0")))
+(defmacro %defpjlink-get (name (class command) (result-var) &body body)
+  (with-gensyms (config host port password local-host local-port stream digest)
+    (multiple-value-bind (body decl doc)
+        (parse-body body :documentation t)
+      `(progn
+         (defgeneric ,name (,config &key &allow-other-keys))
+         (defmethod ,name (,host
+                           &key
+                             ((:port ,port) +pjlink-port+)
+                             ((:password ,password) nil)
+                             ((:local-host ,local-host) nil)
+                             ((:local-port ,local-port) nil))
+           ,doc
+           (let ((,result-var
+                   (%with-pjlink-connection (,stream ,digest)
+                       (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
+                     (%pjlink-get ,stream ,digest ,class ,command))))
+             ,@decl
+             ,@body))
+         (defmethod ,name ((,config pjlink-config) &key)
+           ,doc
+           (let ((,result-var
+                   (%with-pjlink-connection (,stream ,digest)
+                       ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
+                     (%pjlink-get ,stream ,digest ,class ,command))))
+             ,@decl
+             ,@body))))))
 
-(defun pjlink-powr? (connection)
-  "Query the `power-status' of the projector."
-  (let ((result (%pjlink-get connection #\1 "POWR")))
-    (%powr->sym (char result 0))))
+(defmacro %defpjlink-set (name (class command) args &body body)
+  (with-gensyms (config host port password local-host local-port stream digest)
+    (multiple-value-bind (body decl doc)
+        (parse-body body :documentation t)
+      `(progn
+         (defgeneric ,name (,@args ,config &key &allow-other-keys))
+         (defmethod ,name (,@args
+                           ,host
+                           &key
+                             ((:port ,port) +pjlink-port+)
+                             ((:password ,password) nil)
+                             ((:local-host ,local-host) nil)
+                             ((:local-port ,local-port) nil))
+           ,doc
+           ,@decl
+           (%with-pjlink-connection (,stream ,digest)
+               (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
+             (%pjlink-set ,stream ,digest ,class ,command (progn ,@body)))
+           (values))
+         (defmethod ,name (,@args (,config pjlink-config) &key)
+           ,doc
+           ,@decl
+           (%with-pjlink-connection (,stream ,digest)
+               ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
+             (%pjlink-set ,stream ,digest ,class ,command (progn ,@body)))
+           (values))))))
 
-(defun pjlink-inpt (connection input-type input-number)
+(%defpjlink-set power-on (1 "POWR") ()
+  "Instruct the projector to power on."
+  "1")
+
+(%defpjlink-set power-off (1 "POWR") ()
+  "Instruct the projector to power off."
+   "0")
+
+(%defpjlink-get get-power-status (1 "POWR") (result)
+  "Query the `power-status' of the projector.
+see `set-port-on', `set-power-off'"
+  (%powr->sym (char result 0)))
+
+(%defpjlink-set set-input (1 "INPT") (input-type input-number)
   "Sets the input to the given `input-type' and `input-number'
-see `input-type' and `input-number'"
-  (let ((input-str (%input->string input-type input-number)))
-    (%pjlink-set connection #\1 "INPT" input-str)))
+see `set-input*', `get-input'"
+  (%input->string input-type input-number))
 
-(defun pjlink-inpt* (connection input-info)
-  "As `pjlink-inpt', but using an `input-info' object instead.
-see `input-type' and `input-number'"
-  (inpt connection (input-type input-info) (input-number input-info)))
+(%defpjlink-set set-input* (1 "INPT") (input-info)
+  "As `set-input' but using a `projector-input' object instead."
+  (%input->string (input-type input-info) (input-number input-info)))
 
-(defun pjlink-inpt? (connection)
-  "Query the currently set input on the projector.
-see `input-type' and `input-number'"
-  (let ((result (%pjlink-get connection #\1 "INPT")))
-    (make-instance
-     '%input-info
+(%defpjlink-get get-input (1 "INPT") (result)
+  "Query the current `projector-input' on the projector."
+  (make-instance
+     'projector-input
      :type (%input->sym (char result 0))
-     :number (parse-integer result :start 1 :end 2 :radix 10))))
+     :number (parse-integer result :start 1 :end 2 :radix 10)))
 
-(defun pjlink-avmt (connection avmt)
-  "Set the audio-video mute status on the projector.
-see `avmt-status'"
-  (%pjlink-set connection #\1 "AVMT" (%avmt->string avmt)))
+(%defpjlink-set set-av-mute (1 "AVMT") (avmt)
+  "Set the `av-mute-status' on the projector.
+see `get-av-mute'"
+  (%avmt->string avmt))
 
-(defun pjlink-avmt? (connection)
-  "Query the current audio-video mute status of the projector.
-see `avmt-status'"
-  (let ((result (%pjlink-get connection #\1 "AVMT")))
-    (%avmt->sym result)))
+(%defpjlink-get get-av-mute (1 "AVMT") (result)
+  "Query the current `av-mute-status' of the projector.
+see `set-av-mute'"
+  (%avmt->sym result))
 
-(defun pjlink-erst? (connection)
-  "Query the error status of the projector's components.
-see `error-status'"
-  (let ((result (%pjlink-get connection #\1 "ERST")))
-    (make-instance
-     '%error-status
+(%defpjlink-get get-error-status (1 "ERST") (result)
+  "Query the `projector-status' projector."
+  (make-instance
+     'projector-status
      :fan (%erst->sym (char result 0))
      :lamp (%erst->sym (char result 1))
      :temperature (%erst->sym (char result 2))
      :cover-open (%erst->sym (char result 3))
      :filter (%erst->sym (char result 4))
-     :other (%erst->sym (char result 5)))))
+     :other (%erst->sym (char result 5))))
 
-(defun pjlink-lamp? (connection)
-  "Query the available lamps on the projector."
-  (%lamp-str->lamp-infos (%pjlink-get connection #\1 "LAMP")))
+(%defpjlink-get get-lamps (1 "LAMP") (result)
+  "Query the available `projector-lamp's on the projector as a list."
+  (%lamp-str->lamp-infos result))
 
-(defun pjlink-inst? (connection)
-  "Query the available inputs on the projector.
-see `pjlink-inpt' and `pjlink-inpt?'
-see `input-type' and `input-number'"
-  (%inst-str->input-infos (%pjlink-get connection #\1 "INST")))
+(%defpjlink-get get-inputs (1 "INST") (result)
+  "Query the available `projector-input's on the projector as a list."
+  (%inst-str->input-infos result))
 
-(defun pjlink-name? (connection)
+(%defpjlink-get get-projector-name (1 "NAME") (result)
   "Query the projector's name."
-  (%pjlink-get connection #\1 "NAME"))
+  result)
 
-(defun pjlink-inf1? (connection)
+(%defpjlink-get get-manufacturer-name (1 "INF1") (result)
   "Query the projector's manufacturer name."
-  (%pjlink-get connection #\1 "INF1"))
+  result)
 
-(defun pjlink-inf2? (connection)
+(%defpjlink-get get-product-name (1 "INF2") (result)
   "Query the projector's product name."
-  (%pjlink-get connection #\1 "INF2"))
+  result)
 
-(defun pjlink-info? (connection)
+(%defpjlink-get get-other-info (1 "INFO") (result)
   "Query other information about the projector."
-  (%pjlink-get connection #\1 "INFO"))
+  result)
 
-(defun pjlink-clss? (connection)
+(%defpjlink-get get-pjlink-class (1 "CLSS") (result)
   "Query the pjlink class of the projector."
-  (let ((result (%pjlink-get connection #\1 "CLSS")))
-    (values (parse-integer result :radix 36))))
+  (values (parse-integer result :radix 36)))
