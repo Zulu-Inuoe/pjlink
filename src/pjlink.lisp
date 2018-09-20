@@ -27,6 +27,28 @@
 
 (defconstant +pjlink-port+ 4352)
 
+(deftype power-status ()
+  "Power status of a projector.
+see `powr?'"
+  '(member :standby :lamp-on :cooling :warm-up))
+
+(deftype input-type ()
+  "An input type for a projector.
+Note that a projector may have several inputs of the same type, identified by an `input-number`
+see `inpt?' and `inst?'"
+  '(member :rgb :video :digital :storage :network))
+
+(deftype avmt-status ()
+  "Status of the audio-video mute setting on a projector.
+Audio-video mute will cease output of audio or video, without powering off the projector.
+see `avmt' and `avmt?'"
+  '(member :vm-on :am-on :avm-on :avm-off))
+
+(deftype error-status ()
+  "Status of a component of a projector.
+see `erst'"
+  '(member :ok :warning :error))
+
 (defclass %pjlink-connection ()
   ((%socket
     :type usocket:socket
@@ -46,64 +68,64 @@
 
 (defclass %error-status ()
   ((%fan-status
-    :type keyword
+    :type error-status
     :initarg :fan
     :initform (error "Must supply fan status")
     :accessor fan-status)
    (%lamp-status
-    :type keyword
+    :type error-status
     :initarg :lamp
     :initform (error "Must supply lamp status")
     :accessor lamp-status)
    (%temperature-status
-    :type keyword
+    :type error-status
     :initarg :temperature
     :initform (error "Must supply temperature status")
     :accessor temperature-status)
    (%cover-open-status
-    :type keyword
+    :type error-status
     :initarg :cover-open
     :initform (error "Must supply cover-open status")
     :accessor cover-open-status)
    (%filter-status
-    :type keyword
+    :type error-status
     :initarg :filter
     :initform (error "Must supply filter status")
     :accessor filter-status)
    (%other-status
-    :type keyword
+    :type error-status
     :initarg :other
     :initform (error "Must supply other status")
     :accessor other-status)))
 
-(defclass %lamp-info ()
-  ((%number
-    :type integer
-    :initarg :number
-    :initform (error "Must supply number")
-    :accessor lamp-number)
-   (%hours
-    :type integer
-    :initarg :hours
-    :initform (error "Must supply hours")
-    :accessor hours)
-   (%is-on
-    :type boolean
-    :initarg :is-on
-    :initform (error "Must supply is-on")
-    :accessor is-on)))
-
 (defclass %input-info ()
   ((%type
-    :type keyword
+    :type input-type
     :initarg :type
     :initform (error "Must supply type")
     :accessor input-type)
    (%number
-    :type integer
+    :type (integer 1 9)
     :initarg :number
     :initform (error "Must supply number")
     :accessor input-number)))
+
+(defclass %lamp-info ()
+  ((%number
+    :type (integer 0 8)
+    :initarg :number
+    :initform (error "Must supply number")
+    :accessor lamp-number)
+   (%hours
+    :type (integer 0 99999)
+    :initarg :hours
+    :initform (error "Must supply hours")
+    :accessor lamp-hours)
+   (%is-on
+    :type boolean
+    :initarg :is-on
+    :initform (error "Must supply is-on")
+    :accessor lamp-is-on)))
 
 (defun %encrypt-password (password seed &key (seed-start 0))
   "Create the authentication response given `password` and `seed`.
@@ -292,7 +314,7 @@ eg
     :for lamp-number :from 0 :by 1
     :for valid := (or (zerop idx)
                       (char= (char lamps-str (1- (incf idx))) #\Space)
-                      (error "Malformed lamp string"))
+                      (error "Malformed lamp string: '~A'" lamps-str))
     :for hours :=
                (loop
                  :with start := idx
@@ -319,7 +341,7 @@ eg
     :while (< idx (length inst-str))
     :for valid := (or (zerop idx)
                       (char= (char inst-str (1- (incf idx))) #\Space)
-                      (error "Malformed inst string"))
+                      (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
     :collecting (make-instance '%input-info :type type :number number)))
@@ -431,29 +453,48 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
       (make-instance '%pjlink-connection :socket socket :digest digest :class class))))
 
 (defun pjlink-powr (connection power-on)
+  "Instruct the projector to power on, or off."
   (%pjlink-set connection #\1 "POWR" (if power-on "1" "0")))
 
 (defun pjlink-powr? (connection)
+  "Query the `power-status' of the projector."
   (let ((result (%pjlink-get connection #\1 "POWR")))
     (%powr->sym (char result 0))))
 
 (defun pjlink-inpt (connection input-type input-number)
+  "Sets the input to the given `input-type' and `input-number'
+see `input-type' and `input-number'"
   (let ((input-str (%input->string input-type input-number)))
     (%pjlink-set connection #\1 "INPT" input-str)))
 
+(defun pjlink-inpt* (connection input-info)
+  "As `pjlink-inpt', but using an `input-info' object instead.
+see `input-type' and `input-number'"
+  (inpt connection (input-type input-info) (input-number input-info)))
+
 (defun pjlink-inpt? (connection)
+  "Query the currently set input on the projector.
+see `input-type' and `input-number'"
   (let ((result (%pjlink-get connection #\1 "INPT")))
-    (values (%input->sym (char result 0))
-            (parse-integer result :start 1 :end 2 :radix 10))))
+    (make-instance
+     '%input-info
+     :type (%input->sym (char result 0))
+     :number (parse-integer result :start 1 :end 2 :radix 10))))
 
 (defun pjlink-avmt (connection avmt)
+  "Set the audio-video mute status on the projector.
+see `avmt-status'"
   (%pjlink-set connection #\1 "AVMT" (%avmt->string avmt)))
 
 (defun pjlink-avmt? (connection)
+  "Query the current audio-video mute status of the projector.
+see `avmt-status'"
   (let ((result (%pjlink-get connection #\1 "AVMT")))
     (%avmt->sym result)))
 
 (defun pjlink-erst? (connection)
+  "Query the error status of the projector's components.
+see `error-status'"
   (let ((result (%pjlink-get connection #\1 "ERST")))
     (make-instance
      '%error-status
@@ -465,24 +506,32 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
      :other (%erst->sym (char result 5)))))
 
 (defun pjlink-lamp? (connection)
-  ;;Each lamp is returned as a pair of "<hour> SPC <status>" ordered by lamp number
+  "Query the available lamps on the projector."
   (%lamp-str->lamp-infos (%pjlink-get connection #\1 "LAMP")))
 
 (defun pjlink-inst? (connection)
+  "Query the available inputs on the projector.
+see `pjlink-inpt' and `pjlink-inpt?'
+see `input-type' and `input-number'"
   (%inst-str->input-infos (%pjlink-get connection #\1 "INST")))
 
 (defun pjlink-name? (connection)
+  "Query the projector's name."
   (%pjlink-get connection #\1 "NAME"))
 
 (defun pjlink-inf1? (connection)
+  "Query the projector's manufacturer name."
   (%pjlink-get connection #\1 "INF1"))
 
 (defun pjlink-inf2? (connection)
+  "Query the projector's product name."
   (%pjlink-get connection #\1 "INF2"))
 
 (defun pjlink-info? (connection)
+  "Query other information about the projector."
   (%pjlink-get connection #\1 "INFO"))
 
 (defun pjlink-clss? (connection)
+  "Query the pjlink class of the projector."
   (let ((result (%pjlink-get connection #\1 "CLSS")))
-    (values (parse-integer result :radix 16))))
+    (values (parse-integer result :radix 36))))
