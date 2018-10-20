@@ -63,6 +63,7 @@ This prevents having to pass around connection information such as host and pass
 * [alexandria](http://quickdocs.org/alexandria/)
 * [flexi-streams](http://quickdocs.org/flexi-streams/)
 * [md5](http://quickdocs.org/md5/)
+* [split-sequence](http://quickdocs.org/split-sequence/)
 * [usocket](http://quickdocs.org/usocket/)
 
 # License

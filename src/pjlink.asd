@@ -12,4 +12,5 @@
   (#:alexandria
    #:flexi-streams
    #:md5
+   #:split-sequence
    #:usocket))
