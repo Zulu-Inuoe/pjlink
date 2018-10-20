@@ -82,6 +82,12 @@ Note that a projector may have several inputs of the same type, identified by an
 see `get-input', `set-input', and `get-inputs'"
   '(member :rgb :video :digital :storage :network))
 
+(deftype input-type2 ()
+  "An input type for a projector.
+Note that a projector may have several inputs of the same type, identified by an `input-number`
+see `get-input2', `set-input2', and `get-inputs2'"
+  '(or input-type :internal))
+
 (defclass projector-input ()
   ((%type
     :type input-type
@@ -97,6 +103,30 @@ see `get-input', `set-input', and `get-inputs'"
    "An available input for a projector.
 Note that projectors may have multiple inputs of the same type, differentiated by number.
 Note that projector input numbers start at 1, not 0."))
+
+(defmethod print-object ((object projector-input) stream)
+  (print-unreadable-object (object stream :type t)
+    (format stream "~S ~A" (input-type object) (input-number object))))
+
+(defclass projector-input2 ()
+  ((%type
+    :type input-type
+    :initarg :type
+    :initform (error "Must supply type")
+    :reader input-type)
+   (%number
+    :type (integer 1 35)
+    :initarg :number
+    :initform (error "Must supply number")
+    :reader input-number))
+  (:documentation
+   "An available input for a class 2 projector.
+Note that projectors may have multiple inputs of the same type, differentiated by number.
+Note that projector input numbers start at 1, not 0."))
+
+(defmethod print-object ((object projector-input2) stream)
+  (print-unreadable-object (object stream :type t)
+    (format stream "~S ~A" (input-type object) (input-number object))))
 
 (deftype av-mute-status ()
   "Status of the audio-video mute setting on a projector.
@@ -161,6 +191,22 @@ see `projector-status'"
     :initarg :is-on
     :initform (error "Must supply is-on")
     :reader lamp-is-on)))
+
+(defclass projector-resolution ()
+  ((%horz
+    :type integer
+    :initarg :horz
+    :initform (error "Must supply horz")
+    :reader horz-resolution)
+   (%vert
+    :type integer
+    :initarg :vert
+    :initform (error "Must supply vert")
+    :reader vert-resolution)))
+
+(defmethod print-object ((object projector-resolution) stream)
+  (print-unreadable-object (object stream :type t)
+    (format stream "~Ax~A" (horz-resolution object) (vert-resolution object))))
 
 (defun %nibble->hex (nibble)
   "Convert a nibble into its hex char."
@@ -246,15 +292,14 @@ Otherwise calculates the response by prepending the seed from the connection res
     :finally
     (return i)))
 
-(defmacro %with-command-buffer ((buffer digest class command params) &body body)
+(defmacro %with-command-buffer ((buffer digest class command &rest params) &body body)
     "Create a buffer pre-filled with a PJLink command using `digest`, `class`, `command` and `params`
 eg.
   %1CLSS ?<Return>"
-  (with-gensyms (digest-sym class-sym command-sym params-sym idx)
+  (with-gensyms (digest-sym class-sym command-sym idx)
     `(let ((,digest-sym ,digest)
            (,class-sym ,class)
            (,command-sym ,command)
-           (,params-sym ,params)
            (,buffer (make-array 168 :element-type 'character))
            (,idx 0))
        (declare (dynamic-extent ,buffer))
@@ -274,8 +319,13 @@ eg.
        (setf (char ,buffer (1- (incf ,idx))) #\Space)
 
        ;;Add params
-       (replace ,buffer ,params-sym :start1 ,idx)
-       (incf ,idx (length ,params-sym))
+       ,@(with-gensyms (params-sym)
+           (loop
+             :for p :in params
+             :collecting
+             `(let ((,params-sym ,p))
+                (replace ,buffer ,params-sym :start1 ,idx)
+                (incf ,idx (length ,params-sym)))))
 
        ;;End with #\Return
        (setf (char ,buffer (1- (incf ,idx))) #\Return)
@@ -287,7 +337,7 @@ eg.
      ,@body))
 
 (defun %validate-get-result (class command response len)
-  (and (>= len 8)
+  (and (>= len 7)
        (char= (char response 0) #\%)
        (char= (char response 1) (code-char (+ (char-code #\0) class)))
        (string-equal response command :start1 2 :end1 6)
@@ -309,6 +359,15 @@ eg.
     (#\4 :storage)
     (#\5 :network)))
 
+(defun %input2->sym (input-val)
+  (ecase input-val
+    (#\1 :rgb)
+    (#\2 :video)
+    (#\3 :digital)
+    (#\4 :storage)
+    (#\5 :network)
+    (#\6 :internal)))
+
 (defun %input->string (input-type input-number)
   (unless (<= 1 input-number 9)
     (error "Invalid input number '~A'" input-number))
@@ -319,6 +378,19 @@ eg.
             (:digital #\3)
             (:storage #\4)
             (:network #\5))
+          input-number))
+
+(defun %input2->string (input-type input-number)
+  (unless (<= 1 input-number 35)
+    (error "Invalid input number '~A'" input-number))
+  (format nil "~A~D"
+          (ecase input-type
+            (:rgb #\1)
+            (:video #\2)
+            (:digital #\3)
+            (:storage #\4)
+            (:network #\5)
+            (:internal #\6))
           input-number))
 
 (defun %avmt->sym (response)
@@ -378,7 +450,7 @@ eg
 Additional inputs are separated by spaces.
 
 eg
-  11 2Z 3E"
+  11 45 51"
   (loop
     :with idx := 0
     :while (< idx (length inst-str))
@@ -386,10 +458,44 @@ eg
                       (char= (char inst-str (1- (incf idx))) #\Space)
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input->sym (char inst-str (1- (incf idx))))
-    :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
+    :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 10)
     :collecting (make-instance 'projector-input :type type :number number)))
 
-(defun %pjlink-get (stream digest class command)
+(defun %inst-str2->input-infos (inst-str)
+  "Parses a inst string into a list of `input-info`'s
+`inst-str` should be a string where each input is represented by
+
+  <Type><Number>
+
+Additional inputs are separated by spaces.
+
+eg
+  11 2Z 3E 61"
+  (loop
+    :with idx := 0
+    :while (< idx (length inst-str))
+    :for valid := (or (zerop idx)
+                      (char= (char inst-str (1- (incf idx))) #\Space)
+                      (error "Malformed inst string: '~A'" inst-str))
+    :for type := (%input2->sym (char inst-str (1- (incf idx))))
+    :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
+    :collecting (make-instance 'projector-input2 :type type :number number)))
+
+(defun %res-str->resolution (res-str)
+  "Parses a resolution string of the form
+
+<horz>x<vert>
+
+eg
+  1920x1080."
+  (let ((x-pos (position #\x res-str)))
+    (unless x-pos
+      (error "Malformed resolution string: '~A'" res-str))
+    (let ((horz (parse-integer res-str :end x-pos))
+          (vert (parse-integer res-str :start (1+ x-pos))))
+      (make-instance 'projector-resolution :horz horz :vert vert))))
+
+(defun %pjlink-get (stream digest class command args)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
@@ -403,7 +509,7 @@ This will issue a query such as
 Then given a result of
   %1POWR=0
 returns the string \"0\""
-  (%with-command-buffer (out digest class command "?")
+  (%with-command-buffer (out digest class command "?" args)
     (write-sequence out stream)
     (finish-output stream))
   (%with-response-buffer in
@@ -497,33 +603,37 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
               ,@body)
          (usocket:socket-close ,socket)))))
 
-(defmacro %defpjlink-get (name (class command) (result-var) &body body)
-  (with-gensyms (config host port password local-host local-port stream digest)
+(defmacro %defpjlink-get (name (class command) (&whole input-transform &optional input-args &body transform-body) (result-var) &body body)
+  (with-gensyms (input-transform-fn config host port password local-host local-port stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
       `(progn
-         (defgeneric ,name (,config &key &allow-other-keys))
-         (defmethod ,name (,host
-                           &key
-                             ((:port ,port) +pjlink-port+)
-                             ((:password ,password) nil)
-                             ((:local-host ,local-host) nil)
-                             ((:local-port ,local-port) nil))
-           ,doc
-           (let ((,result-var
-                   (%with-pjlink-connection (,stream ,digest)
-                       (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
-                     (%pjlink-get ,stream ,digest ,class ,command))))
-             ,@decl
-             ,@body))
-         (defmethod ,name ((,config pjlink-config) &key)
-           ,doc
-           (let ((,result-var
-                   (%with-pjlink-connection (,stream ,digest)
-                       ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
-                     (%pjlink-get ,stream ,digest ,class ,command))))
-             ,@decl
-             ,@body))))))
+         (flet ((,input-transform-fn (,@input-args)
+                  ,@(if input-transform
+                        transform-body
+                        '(""))))
+           (defgeneric ,name (,@input-args ,config &key &allow-other-keys))
+           (defmethod ,name (,@input-args ,host
+                             &key
+                               ((:port ,port) +pjlink-port+)
+                               ((:password ,password) nil)
+                               ((:local-host ,local-host) nil)
+                               ((:local-port ,local-port) nil))
+             ,doc
+             (let ((,result-var
+                     (%with-pjlink-connection (,stream ,digest)
+                         (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
+                       (%pjlink-get ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
+               ,@decl
+               ,@body))
+           (defmethod ,name (,@input-args (,config pjlink-config) &key)
+             ,doc
+             (let ((,result-var
+                     (%with-pjlink-connection (,stream ,digest)
+                         ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
+                       (%pjlink-get ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
+               ,@decl
+               ,@body)))))))
 
 (defmacro %defpjlink-set (name (class command) args &body body)
   (with-gensyms (config host port password local-host local-port stream digest)
@@ -552,6 +662,9 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
              (%pjlink-set ,stream ,digest ,class ,command (progn ,@body)))
            (values))))))
 
+
+;;; Class 1 commands
+
 (%defpjlink-set power-on (1 "POWR") ()
   "Instruct the projector to power on."
   "1")
@@ -560,7 +673,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
   "Instruct the projector to power off."
    "0")
 
-(%defpjlink-get get-power-status (1 "POWR") (result)
+(%defpjlink-get get-power-status (1 "POWR") nil (result)
   "Query the `power-status' of the projector.
 see `set-port-on', `set-power-off'"
   (%powr->sym (char result 0)))
@@ -574,7 +687,7 @@ see `set-input*', `get-input'"
   "As `set-input' but using a `projector-input' object instead."
   (%input->string (input-type input-info) (input-number input-info)))
 
-(%defpjlink-get get-input (1 "INPT") (result)
+(%defpjlink-get get-input (1 "INPT") nil (result)
   "Query the current `projector-input' on the projector."
   (make-instance
      'projector-input
@@ -586,12 +699,12 @@ see `set-input*', `get-input'"
 see `get-av-mute'"
   (%avmt->string avmt))
 
-(%defpjlink-get get-av-mute (1 "AVMT") (result)
+(%defpjlink-get get-av-mute (1 "AVMT") nil (result)
   "Query the current `av-mute-status' of the projector.
 see `set-av-mute'"
   (%avmt->sym result))
 
-(%defpjlink-get get-error-status (1 "ERST") (result)
+(%defpjlink-get get-error-status (1 "ERST") nil (result)
   "Query the `projector-status' projector."
   (make-instance
      'projector-status
@@ -602,30 +715,141 @@ see `set-av-mute'"
      :filter (%erst->sym (char result 4))
      :other (%erst->sym (char result 5))))
 
-(%defpjlink-get get-lamps (1 "LAMP") (result)
+(%defpjlink-get get-lamps (1 "LAMP") nil (result)
   "Query the available `projector-lamp's on the projector as a list."
   (%lamp-str->lamp-infos result))
 
-(%defpjlink-get get-inputs (1 "INST") (result)
+(%defpjlink-get get-inputs (1 "INST") nil (result)
   "Query the available `projector-input's on the projector as a list."
   (%inst-str->input-infos result))
 
-(%defpjlink-get get-projector-name (1 "NAME") (result)
-  "Query the projector's name."
-  result)
+(%defpjlink-get get-projector-name (1 "NAME") nil (result)
+  "Query the projector's name.
+nil if not available."
+  (unless (zerop (length result))
+    result))
 
-(%defpjlink-get get-manufacturer-name (1 "INF1") (result)
-  "Query the projector's manufacturer name."
-  result)
+(%defpjlink-get get-manufacturer-name (1 "INF1") nil (result)
+  "Query the projector's manufacturer name.
+nil if not available."
+  (unless (zerop (length result))
+    result))
 
-(%defpjlink-get get-product-name (1 "INF2") (result)
-  "Query the projector's product name."
-  result)
+(%defpjlink-get get-product-name (1 "INF2") nil (result)
+  "Query the projector's product name.
+nil if not available."
+  (unless (zerop (length result))
+    result))
 
-(%defpjlink-get get-other-info (1 "INFO") (result)
-  "Query other information about the projector."
-  result)
+(%defpjlink-get get-other-info (1 "INFO") nil (result)
+  "Query other information about the projector.
+nil if not available."
+  (unless (zerop (length result))
+    result))
 
-(%defpjlink-get get-pjlink-class (1 "CLSS") (result)
+(%defpjlink-get get-pjlink-class (1 "CLSS") nil (result)
   "Query the pjlink class of the projector."
   (values (parse-integer result :radix 36)))
+
+;;; Class 2 commands
+(%defpjlink-set set-input2 (2 "INPT") (input-type input-number)
+  "Sets the input to the given `input-type' and `input-number'
+see `set-input2*', `get-input2'"
+  (%input2->string input-type input-number))
+
+(%defpjlink-set set-input2* (2 "INPT") (input-info)
+  "As `set-input2' but using a `projector-input' or `projector-input2' object instead."
+  (%input2->string (input-type input-info) (input-number input-info)))
+
+(%defpjlink-get get-input2 (2 "INPT") nil (result)
+  (make-instance
+   'projector-input2
+   :type (%input2->sym (char result 0))
+   :number (parse-integer result :start 1 :end 2 :radix 36)))
+
+(%defpjlink-get get-inputs2 (2 "INST") nil (result)
+  "Query the available `projector-input2's on the projector as a list."
+  (%inst-str2->input-infos result))
+
+(%defpjlink-get get-serial-number (2 "SNUM") nil (result)
+  "Get the serial number of the projector.
+nil if not available."
+  (unless (zerop (length result))
+    result))
+
+(%defpjlink-get get-serial-number (2 "SVER") nil (result)
+  "Get the software version of the projector.
+nil if not available."
+  (unless (zerop (length result))
+    result))
+
+(%defpjlink-get get-input-name (2 "INNM")
+    ((input-type input-number)
+      (%input2->string input-type input-number))
+  (result)
+  "Get the software version of the projector.
+nil if not available."
+  (unless (zerop (length result))
+    result))
+
+(%defpjlink-get get-resolution (2 "IRES") nil (result)
+  "Get the current resolution of the active input.
+:no-signal if no signal is available
+:unknown-signal if there is an unknown signal active"
+  (case (char result 0)
+    (#\- :no-signal)
+    (#\* :unknown-signal)
+    (t (%res-str->resolution result))))
+
+(%defpjlink-get get-recommended-resolution (2 "RRES") nil (result)
+  "Get the recommended resolution for the projector."
+  (unless (zerop (length result))
+    (%res-str->resolution result)))
+
+(%defpjlink-get get-filter-usage-time (2 "FILT") nil (result)
+  "Get the filter usage time of the projector."
+  (values (parse-integer result)))
+
+(%defpjlink-get get-lamp-model (2 "RLMP") nil (result)
+  "Get the lamp replacement model numbers.
+nil if no replacement model numbers are available."
+  (unless (zerop (length result))
+    (split-sequence:split-sequence #\Space result :remove-empty-subseqs t)))
+
+(%defpjlink-get get-filter-model (2 "RFIL") nil (result)
+  "Get the filter replacement model numbers.
+nil if no replacement model numbers are available."
+  (unless (zerop (length result))
+    (split-sequence:split-sequence #\Space result :remove-empty-subseqs t)))
+
+(%defpjlink-set increase-speaker (2 "SVOL") ()
+  "Increment the speaker volume by one level."
+  "1")
+
+(%defpjlink-set decrease-speaker (2 "SVOL") ()
+  "Decrement the speaker volume by one level."
+  "0")
+
+(%defpjlink-set increase-microphone (2 "MVOL") ()
+  "Increment the microphone volume by one level."
+  "1")
+
+(%defpjlink-set decrease-microphone (2 "MVOL") ()
+  "Decrement the microphone volume by one level."
+  "0")
+
+(%defpjlink-set freeze-screen (2 "FREZ") ()
+  "Freeze the screen."
+  "1")
+
+(%defpjlink-set unfreeze-screen (2 "FREZ") ()
+  "Freeze the screen."
+  "0")
+
+(%defpjlink-get get-freeze-status (2 "FREZ") nil (result)
+  "Query the current freeze status of the projector.
+true if freeze is ON
+false if freeze is OFF"
+  (ecase (char result 0)
+    (#\0 nil)
+    (#\1 t)))
