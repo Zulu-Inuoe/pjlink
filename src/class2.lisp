@@ -106,6 +106,11 @@ nil if not available."
   (unless (zerop (length result))
     result))
 
+(%defpjlink-get get-input-name* (2 "INNM")
+    ((input-info)
+      (%input2->string (car input-info) (cdr input-info)))
+  (result)
+  "As `get-input-name' but using a `projector-input' or `projector-input2' object instead.
 nil if not available."
   (unless (zerop (length result))
     result))
