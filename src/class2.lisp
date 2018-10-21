@@ -7,7 +7,7 @@
 Note that a projector may have several inputs of the same type, identified by an `input-number`
 see `input-type'
 see `get-input2', `set-input2', and `get-inputs2'"
-  '(or input-type :internal))
+  '(or input-type (eql :internal)))
 
 (defclass projector-input2 ()
   ((%type
