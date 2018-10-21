@@ -612,7 +612,8 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
                   ,@(if input-transform
                         transform-body
                         '(""))))
-           (defgeneric ,name (,@input-args ,config &key &allow-other-keys))
+           (defgeneric ,name (,@input-args ,config &key &allow-other-keys)
+             (:documentation ,doc))
            (defmethod ,name (,@input-args ,host
                              &key
                                ((:port ,port) +pjlink-port+)
