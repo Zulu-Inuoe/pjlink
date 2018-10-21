@@ -13,26 +13,6 @@ Note that a projector may have several inputs of the same type, identified by an
 see `get-input', `set-input', and `get-inputs'"
   '(member :rgb :video :digital :storage :network))
 
-(defclass projector-input ()
-  ((%type
-    :type input-type
-    :initarg :type
-    :initform (error "Must supply type")
-    :reader input-type)
-   (%number
-    :type (integer 1 9)
-    :initarg :number
-    :initform (error "Must supply number")
-    :reader input-number))
-  (:documentation
-   "An available input for a projector.
-Note that projectors may have multiple inputs of the same type, differentiated by number.
-Note that projector input numbers start at 1, not 0."))
-
-(defmethod print-object ((object projector-input) stream)
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S ~A" (input-type object) (input-number object))))
-
 (deftype av-mute-status ()
   "Status of the audio-video mute setting on a projector.
 Audio-video mute will cease output of audio or video, without powering off the projector.
@@ -44,58 +24,7 @@ see `set-av-mute'"
   "Status of a component of a projector.
 see `get-error-status'
 see `projector-status'"
-  '(member :ok :warning :error))
-
-(defclass projector-status ()
-  ((%fan-status
-    :type error-status
-    :initarg :fan
-    :initform (error "Must supply fan status")
-    :reader fan-status)
-   (%lamp-status
-    :type error-status
-    :initarg :lamp
-    :initform (error "Must supply lamp status")
-    :reader lamp-status)
-   (%temperature-status
-    :type error-status
-    :initarg :temperature
-    :initform (error "Must supply temperature status")
-    :reader temperature-status)
-   (%cover-open-status
-    :type error-status
-    :initarg :cover-open
-    :initform (error "Must supply cover-open status")
-    :reader cover-open-status)
-   (%filter-status
-    :type error-status
-    :initarg :filter
-    :initform (error "Must supply filter status")
-    :reader filter-status)
-   (%other-status
-    :type error-status
-    :initarg :other
-    :initform (error "Must supply other status")
-    :reader other-status))
-  (:documentation
-   "The status of projector components."))
-
-(defclass projector-lamp ()
-  ((%number
-    :type (integer 0 8)
-    :initarg :number
-    :initform (error "Must supply number")
-    :reader lamp-number)
-   (%hours
-    :type (integer 0 99999)
-    :initarg :hours
-    :initform (error "Must supply hours")
-    :reader lamp-hours)
-   (%is-on
-    :type boolean
-    :initarg :is-on
-    :initform (error "Must supply is-on")
-    :reader lamp-is-on)))
+  '(member nil :warning :error))
 
 (defun %powr->sym (input-val)
   (ecase input-val
@@ -140,7 +69,7 @@ see `projector-status'"
 
 (defun %erst->sym (erst)
   (ecase erst
-    (#\0 :ok)
+    (#\0 nil)
     (#\1 :warning)
     (#\2 :error)))
 
@@ -157,7 +86,6 @@ eg
   (loop
     :with idx := 0
     :while (< idx (length lamps-str))
-    :for lamp-number :from 0 :by 1
     :for valid := (or (zerop idx)
                       (char= (char lamps-str (1- (incf idx))) #\Space)
                       (error "Malformed lamp string: '~A'" lamps-str))
@@ -170,7 +98,7 @@ eg
     :for is-on := (ecase (char lamps-str (1- (incf idx)))
                     (#\0 nil)
                     (#\1 t))
-    :collecting (make-instance 'projector-lamp :number lamp-number :hours hours :is-on is-on)))
+    :collecting (cons hours is-on)))
 
 (defun %inst-str->input-infos (inst-str)
   "Parses a inst string into a list of `input-info`'s
@@ -190,7 +118,7 @@ eg
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 10)
-    :collecting (make-instance 'projector-input :type type :number number)))
+    :collecting (cons type number)))
 
 ;;; Class 1 commands
 
@@ -214,14 +142,13 @@ see `set-input*', `get-input'"
 
 (%defpjlink-set set-input* (1 "INPT") (input-info)
   "As `set-input' but using a `projector-input' object instead."
-  (%input->string (input-type input-info) (input-number input-info)))
+  (%input->string (car input-info) (cdr input-info)))
 
 (%defpjlink-get get-input (1 "INPT") nil (result)
   "Query the current `projector-input' on the projector."
-  (make-instance
-     'projector-input
-     :type (%input->sym (char result 0))
-     :number (parse-integer result :start 1 :end 2 :radix 10)))
+  (cons
+   (%input->sym (char result 0))
+   (parse-integer result :start 1 :end 2 :radix 10)))
 
 (%defpjlink-set set-av-mute (1 "AVMT") (avmt)
   "Set the `av-mute-status' on the projector.
@@ -235,14 +162,13 @@ see `set-av-mute'"
 
 (%defpjlink-get get-error-status (1 "ERST") nil (result)
   "Query the `projector-status' projector."
-  (make-instance
-     'projector-status
-     :fan (%erst->sym (char result 0))
-     :lamp (%erst->sym (char result 1))
-     :temperature (%erst->sym (char result 2))
-     :cover-open (%erst->sym (char result 3))
-     :filter (%erst->sym (char result 4))
-     :other (%erst->sym (char result 5))))
+  (list
+   (cons :fan (%erst->sym (char result 0)))
+   (cons :lamp (%erst->sym (char result 1)))
+   (cons :temperature (%erst->sym (char result 2)))
+   (cons :cover-open (%erst->sym (char result 3)))
+   (cons :filter (%erst->sym (char result 4)))
+   (cons :other (%erst->sym (char result 5)))))
 
 (%defpjlink-get get-lamps (1 "LAMP") nil (result)
   "Query the available `projector-lamp's on the projector as a list."

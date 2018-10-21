@@ -9,42 +9,6 @@ see `input-type'
 see `get-input2', `set-input2', and `get-inputs2'"
   '(or input-type (eql :internal)))
 
-(defclass projector-input2 ()
-  ((%type
-    :type input-type
-    :initarg :type
-    :initform (error "Must supply type")
-    :reader input-type)
-   (%number
-    :type (integer 1 35)
-    :initarg :number
-    :initform (error "Must supply number")
-    :reader input-number))
-  (:documentation
-   "An available input for a class 2 projector.
-Note that projectors may have multiple inputs of the same type, differentiated by number.
-Note that projector input numbers start at 1, not 0."))
-
-(defmethod print-object ((object projector-input2) stream)
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S ~A" (input-type object) (input-number object))))
-
-(defclass projector-resolution ()
-  ((%horz
-    :type integer
-    :initarg :horz
-    :initform (error "Must supply horz")
-    :reader horz-resolution)
-   (%vert
-    :type integer
-    :initarg :vert
-    :initform (error "Must supply vert")
-    :reader vert-resolution)))
-
-(defmethod print-object ((object projector-resolution) stream)
-  (print-unreadable-object (object stream :type t)
-    (format stream "~Ax~A" (horz-resolution object) (vert-resolution object))))
-
 (defun %input2->sym (input-val)
   (ecase input-val
     (#\1 :rgb)
@@ -85,7 +49,7 @@ eg
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input2->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
-    :collecting (make-instance 'projector-input2 :type type :number number)))
+    :collecting (cons type number)))
 
 (defun %res-str->resolution (res-str)
   "Parses a resolution string of the form
@@ -99,7 +63,7 @@ eg
       (error "Malformed resolution string: '~A'" res-str))
     (let ((horz (parse-integer res-str :end x-pos))
           (vert (parse-integer res-str :start (1+ x-pos))))
-      (make-instance 'projector-resolution :horz horz :vert vert))))
+      (cons horz vert))))
 
 ;;; Class 2 commands
 (%defpjlink-set set-input2 (2 "INPT") (input-type input-number)
@@ -110,13 +74,12 @@ see `set-input2*', `get-input2'"
 
 (%defpjlink-set set-input2* (2 "INPT") (input-info)
   "As `set-input2' but using a `projector-input' or `projector-input2' object instead."
-  (%input2->string (input-type input-info) (input-number input-info)))
+  (%input2->string (car input-info) (cdr input-info)))
 
 (%defpjlink-get get-input2 (2 "INPT") nil (result)
-  (make-instance
-   'projector-input2
-   :type (%input2->sym (char result 0))
-   :number (parse-integer result :start 1 :end 2 :radix 36)))
+  (cons
+   (%input2->sym (char result 0))
+   (parse-integer result :start 1 :end 2 :radix 36)))
 
 (%defpjlink-get get-inputs2 (2 "INST") nil (result)
   "Query the available `projector-input2's on the projector as a list."
