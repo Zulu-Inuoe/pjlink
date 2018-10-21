@@ -44,7 +44,7 @@
   ((%host
     :type hostname
     :initarg :host
-    :initform #(127 0 0 1)
+    :initform "localhost"
     :accessor host)
    (%port
     :type integer
