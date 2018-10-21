@@ -91,7 +91,7 @@ nil if not available."
   (unless (zerop (length result))
     result))
 
-(%defpjlink-get get-serial-number (2 "SVER") nil (result)
+(%defpjlink-get get-software-version (2 "SVER") nil (result)
   "Get the software version of the projector.
 nil if not available."
   (unless (zerop (length result))
@@ -101,7 +101,11 @@ nil if not available."
     ((input-type input-number)
       (%input2->string input-type input-number))
   (result)
-  "Get the software version of the projector.
+  "Get the input name of the given input type and number
+nil if not available."
+  (unless (zerop (length result))
+    result))
+
 nil if not available."
   (unless (zerop (length result))
     result))
