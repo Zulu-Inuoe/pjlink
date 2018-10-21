@@ -7,7 +7,9 @@
   :components
   ((:static-file "qlfile")
    (:file "package")
-   (:file "pjlink"))
+   (:file "pjlink")
+   (:file "class1")
+   (:file "class2"))
   :depends-on
   (#:alexandria
    #:flexi-streams
