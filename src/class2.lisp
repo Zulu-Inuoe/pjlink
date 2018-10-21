@@ -29,6 +29,22 @@ Note that projector input numbers start at 1, not 0."))
   (print-unreadable-object (object stream :type t)
     (format stream "~S ~A" (input-type object) (input-number object))))
 
+(defclass projector-resolution ()
+  ((%horz
+    :type integer
+    :initarg :horz
+    :initform (error "Must supply horz")
+    :reader horz-resolution)
+   (%vert
+    :type integer
+    :initarg :vert
+    :initform (error "Must supply vert")
+    :reader vert-resolution)))
+
+(defmethod print-object ((object projector-resolution) stream)
+  (print-unreadable-object (object stream :type t)
+    (format stream "~Ax~A" (horz-resolution object) (vert-resolution object))))
+
 (defun %input2->sym (input-val)
   (ecase input-val
     (#\1 :rgb)

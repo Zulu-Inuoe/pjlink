@@ -97,22 +97,6 @@ see `projector-status'"
     :initform (error "Must supply is-on")
     :reader lamp-is-on)))
 
-(defclass projector-resolution ()
-  ((%horz
-    :type integer
-    :initarg :horz
-    :initform (error "Must supply horz")
-    :reader horz-resolution)
-   (%vert
-    :type integer
-    :initarg :vert
-    :initform (error "Must supply vert")
-    :reader vert-resolution)))
-
-(defmethod print-object ((object projector-resolution) stream)
-  (print-unreadable-object (object stream :type t)
-    (format stream "~Ax~A" (horz-resolution object) (vert-resolution object))))
-
 (defun %powr->sym (input-val)
   (ecase input-val
     (#\0 :standby)
