@@ -66,6 +66,7 @@ eg
       (cons horz vert))))
 
 ;;; Class 2 commands
+
 (%defpjlink-set set-input2 (2 "INPT") (input-type input-number)
   "Sets the input to the given `input-type2' and `input-number'
 see `input-type2'
@@ -176,3 +177,52 @@ false if freeze is OFF"
   (ecase (char result 0)
     (#\0 nil)
     (#\1 t)))
+
+;;; Search protocol
+
+(defun %validate-search-ack (class response len)
+  (and (= len 25)
+       (char= (char response 0) #\%)
+       (char= (char response 1) (code-char (+ (char-code #\0) class)))
+       (string-equal response "ACKN=" :start1 2 :end1 7)))
+
+(defun %parse-search-ack (response)
+  (let ((mac (make-array 6 :element-type '(unsigned-byte 8))))
+    (setf (aref mac 0) (parse-integer response :start 7 :end 9 :radix 16)
+          (aref mac 1) (parse-integer response :start 10 :end 12 :radix 16)
+          (aref mac 2) (parse-integer response :start 13 :end 15 :radix 16)
+          (aref mac 3) (parse-integer response :start 16 :end 18 :radix 16)
+          (aref mac 4) (parse-integer response :start 19 :end 21 :radix 16)
+          (aref mac 5) (parse-integer response :start 22 :end 24 :radix 16))
+    mac))
+
+(defun search-projectors (address &key (port +pjlink-port+))
+  (usocket:with-connected-socket (socket
+                                  (usocket:socket-connect nil nil
+                                                          :protocol :datagram
+                                                          :element-type 'character
+                                                          :local-port port))
+    (setf (usocket:socket-option socket :broadcast) t)
+    (let ((buf (make-array 7 :element-type 'character :initial-contents #(#\% #\2 #\S #\R #\C #\H #\Return))))
+      (declare (dynamic-extent buf))
+      (usocket:socket-send socket buf (length buf) :port port :host address))
+
+    (let ((buf (make-array 40 :element-type 'character)))
+      (declare (dynamic-extent buf))
+      (loop
+        :for remaining-time := 30
+        :if (multiple-value-bind (ready time-left)
+                (usocket:wait-for-input socket :timeout remaining-time :ready-only t)
+              (when (and (not ready) (null time-left))
+                (loop-finish))
+
+              (setf remaining-time (or time-left 0))
+
+              (when ready
+                (multiple-value-bind (buf len remote-host remote-port)
+                    (usocket:socket-receive socket buf (length buf) :element-type 'character)
+                  (declare (ignore remote-port))
+                  (when (%validate-search-ack 2 buf len)
+                    (let ((mac-address (%parse-search-ack buf)))
+                      (cons remote-host mac-address))))))
+          :collect :it))))
