@@ -9,6 +9,10 @@ see `input-type'
 see `get-input2', `set-input2', and `get-inputs2'"
   '(or input-type (eql :internal)))
 
+(deftype mac-address ()
+  "A MAC address as a vector of 6 octets."
+  '(vector (unsigned-byte 8) 6))
+
 (defun %input2->sym (input-val)
   (ecase input-val
     (#\1 :rgb)
@@ -196,33 +200,89 @@ false if freeze is OFF"
           (aref mac 5) (parse-integer response :start 22 :end 24 :radix 16))
     mac))
 
-(defun search-projectors (address &key (port +pjlink-port+))
-  (usocket:with-connected-socket (socket
-                                  (usocket:socket-connect nil nil
-                                                          :protocol :datagram
-                                                          :element-type 'character
-                                                          :local-port port))
-    (setf (usocket:socket-option socket :broadcast) t)
-    (let ((buf (make-array 7 :element-type 'character :initial-contents #(#\% #\2 #\S #\R #\C #\H #\Return))))
-      (declare (dynamic-extent buf))
-      (usocket:socket-send socket buf (length buf) :port port :host address))
+(defun %normalize-hostname (host)
+  "Returns a normalized octet vector representation of host"
+  (car (usocket:get-hosts-by-name (usocket::host-to-hostname host))))
 
-    (let ((buf (make-array 40 :element-type 'character)))
-      (declare (dynamic-extent buf))
-      (loop
-        :for remaining-time := 30
-        :if (multiple-value-bind (ready time-left)
-                (usocket:wait-for-input socket :timeout remaining-time :ready-only t)
-              (when (and (not ready) (null time-left))
-                (loop-finish))
+(defun %find-broadcast-interface (interface-address)
+  "Find an IP interface matching `interface-address' with broadcast capabilities
+nil if no such interface is available."
+  (find interface-address
+        (ip-interfaces:get-ip-interfaces-by-flags '(:iff_broadcast))
+        :key #'ip-interfaces:ip-interface-address
+        :test #'equalp))
 
-              (setf remaining-time (or time-left 0))
+(defun %calculate-broadcast-addr (address subnet)
+  "Calculate a broadcast address vector from an ipv4 address and subnet."
+  (let ((broadcast-addr (make-array 4 :element-type '(unsigned-byte 8))))
+    (setf (aref broadcast-addr 0) (+ 256 (logorc2 (aref address 0) (aref subnet 0)))
+          (aref broadcast-addr 1) (+ 256 (logorc2 (aref address 1) (aref subnet 1)))
+          (aref broadcast-addr 2) (+ 256 (logorc2 (aref address 2) (aref subnet 2)))
+          (aref broadcast-addr 3) (+ 256 (logorc2 (aref address 3) (aref subnet 3))))
+    broadcast-addr))
 
-              (when ready
-                (multiple-value-bind (buf len remote-host remote-port)
-                    (usocket:socket-receive socket buf (length buf) :element-type 'character)
-                  (declare (ignore remote-port))
-                  (when (%validate-search-ack 2 buf len)
-                    (let ((mac-address (%parse-search-ack buf)))
-                      (cons remote-host mac-address))))))
-          :collect :it))))
+(defun %calculate-broadcast-addr* (interface)
+  "Calculates a broadcast address vector from an `ip-interfaces::ip-interface'"
+  ;;NOTE: ip-interfaces has a ip-interfaces:ip-interface-broadcast-address
+  ;;      but that doesn't seen to be getting calculated correctly
+  (let ((address (ip-interfaces:ip-interface-address interface))
+        (subnet (ip-interfaces:ip-interface-netmask interface)))
+    (%calculate-broadcast-addr address subnet)))
+
+(defun %address-and-broadcast (local-host
+                               &aux
+                                 (normalized (and local-host (%normalize-hostname local-host)))
+                                 (ipv6 (and normalized (= (length normalized) 16))))
+  "Returns the address and broadcast address to use for the interface `local-host'
+Finds a suitable broadcast interface matching `local-host' and returns its address.
+When `local-host' is nil, the general broadcast address is used"
+  (when ipv6
+    (error "ipv6 not supported"))
+
+  (let ((interface (and normalized (%find-broadcast-interface normalized))))
+    (when (and normalized (null interface))
+      (error "no such interface: ~A" local-host))
+
+    (if interface
+        (values (ip-interfaces:ip-interface-address interface) (%calculate-broadcast-addr* interface))
+        (values nil #(255 255 255 255)))))
+
+(defun search-projectors (&key local-host (port +pjlink-port+))
+  "Performs a PJLink broadcast search.
+Returns a list of `(`hostname' . `mac-address')` pairs representing each projector that responded.
+
+`local-host' indicates the local interface to use for the search. if nil will
+use the general broadcast address instead.
+`port' is the port used for the SRCH operation."
+  (multiple-value-bind (address broadcast-address)
+      (%address-and-broadcast local-host)
+    (usocket:with-connected-socket (socket
+                                    (usocket:socket-connect nil nil
+                                                            :protocol :datagram
+                                                            :element-type 'character
+                                                            :local-host address
+                                                            :local-port port))
+      (setf (usocket:socket-option socket :broadcast) t)
+      (let ((buf (make-array 7 :element-type 'character :initial-contents #(#\% #\2 #\S #\R #\C #\H #\Return))))
+        (declare (dynamic-extent buf))
+        (usocket:socket-send socket buf (length buf) :host broadcast-address :port port))
+
+      (let ((buf (make-array 40 :element-type 'character)))
+        (declare (dynamic-extent buf))
+        (loop
+          :for remaining-time := 30
+          :if (multiple-value-bind (ready time-left)
+                  (usocket:wait-for-input socket :timeout remaining-time :ready-only t)
+                (when (and (not ready) (null time-left))
+                  (loop-finish))
+
+                (setf remaining-time (or time-left 0))
+
+                (when ready
+                  (multiple-value-bind (buf len remote-host remote-port)
+                      (usocket:socket-receive socket buf (length buf) :element-type 'character)
+                    (declare (ignore remote-port))
+                    (when (%validate-search-ack 2 buf len)
+                      (let ((mac-address (%parse-search-ack buf)))
+                        (cons remote-host mac-address))))))
+            :collect :it)))))

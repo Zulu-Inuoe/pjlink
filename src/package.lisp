@@ -56,4 +56,6 @@
    #:decrease-microphone
    #:freeze-screen
    #:unfreeze-screen
-   #:get-freeze-status))
+   #:get-freeze-status
+
+   #:search-projectors))

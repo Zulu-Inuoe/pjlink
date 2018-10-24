@@ -1,5 +1,6 @@
 ql alexandria :latest
 ql flexi-streams :latest
+ql ip-interfaces :latest
 ql md5 :latest
 ql split-sequence :latest
 ql usocket :latest

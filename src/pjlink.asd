@@ -13,6 +13,7 @@
   :depends-on
   (#:alexandria
    #:flexi-streams
+   #:ip-interfaces
    #:md5
    #:split-sequence
    #:usocket))
