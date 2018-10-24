@@ -215,10 +215,10 @@ nil if no such interface is available."
 (defun %calculate-broadcast-addr (address subnet)
   "Calculate a broadcast address vector from an ipv4 address and subnet."
   (let ((broadcast-addr (make-array 4 :element-type '(unsigned-byte 8))))
-    (setf (aref broadcast-addr 0) (+ 256 (logorc2 (aref address 0) (aref subnet 0)))
-          (aref broadcast-addr 1) (+ 256 (logorc2 (aref address 1) (aref subnet 1)))
-          (aref broadcast-addr 2) (+ 256 (logorc2 (aref address 2) (aref subnet 2)))
-          (aref broadcast-addr 3) (+ 256 (logorc2 (aref address 3) (aref subnet 3))))
+    (setf (aref broadcast-addr 0) (logand 255 (logorc2 (aref address 0) (aref subnet 0)))
+          (aref broadcast-addr 1) (logand 255 (logorc2 (aref address 1) (aref subnet 1)))
+          (aref broadcast-addr 2) (logand 255 (logorc2 (aref address 2) (aref subnet 2)))
+          (aref broadcast-addr 3) (logand 255 (logorc2 (aref address 3) (aref subnet 3))))
     broadcast-addr))
 
 (defun %calculate-broadcast-addr* (interface)
