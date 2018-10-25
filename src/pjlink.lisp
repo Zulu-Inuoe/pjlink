@@ -2,7 +2,6 @@
 
 (in-package #:pjlink)
 
-
 ;;;
 ;;; The structure of a PJLink command:
 ;;;  +--------------+---------+---------------+--------------------+----------------+
@@ -74,6 +73,57 @@
   local-host - Local interface to use
   local-port - Local port to use"))
 
+(define-condition projector-command-error (error)
+  ((%host
+    :initarg :host
+    :reader projector-command-error-host)
+   (%class
+    :initarg :class
+    :reader projector-command-error-class)
+   (%command
+    :initarg :command
+    :reader projector-command-error-command)))
+
+(define-condition authorization-error (projector-command-error)
+  ()
+  (:report (lambda (c stream)
+             (format stream "Autorization on '~A' failed" (projector-command-error-host c)))))
+
+(define-condition undefined-command-error (projector-command-error)
+  ()
+  (:report (lambda (c stream)
+             (format stream "Host '~A' does not support class '~A' command '~A'"
+                     (projector-command-error-host c)
+                     (projector-command-error-class c)
+                     (projector-command-error-command c)))))
+
+(define-condition out-of-parameter-error (projector-command-error)
+  ((%parameter
+    :initarg :parameter
+    :reader out-of-parameter-error-parameter))
+  (:report (lambda (c stream)
+             (format stream "'~A' is out of bounds on '~A' for class '~A' command '~A'"
+                     (out-of-parameter-error-parameter c)
+                     (projector-command-error-host c)
+                     (projector-command-error-class c)
+                     (projector-command-error-command c)))))
+
+(define-condition unavailable-time-error (projector-command-error)
+  ()
+  (:report (lambda (c stream)
+             (format stream "Host '~A' cannot execute class '~A' command '~A' at this time."
+                     (projector-command-error-host c)
+                     (projector-command-error-class c)
+                     (projector-command-error-command c)))))
+
+(define-condition projector-display-error (projector-command-error)
+  ()
+  (:report (lambda (c stream)
+             (format stream "Host '~A' failed to execute class '~A' command '~A'."
+                     (projector-command-error-host c)
+                     (projector-command-error-class c)
+                     (projector-command-error-command c)))))
+
 (defun %nibble->hex (nibble)
   "Convert a nibble into its hex char."
   (ecase nibble
@@ -104,7 +154,7 @@
        (setf (char hex-digest hidx) (%nibble->hex (ash (logand #xF0 (aref md5 nidx)) -4))
              (char hex-digest (1+ hidx)) (%nibble->hex (logand #x0F (aref md5 nidx))))
     :finally
-    (return hex-digest)))
+       (return hex-digest)))
 
 (defun %encrypt-password (connection-response password plen)
   "Create a PJLink authentication digest from `connection-response' and `password'
@@ -156,10 +206,10 @@ Otherwise calculates the response by prepending the seed from the connection res
     :until (char= b #\Return)
     :do (setf (char buffer i) b)
     :finally
-    (return i)))
+       (return i)))
 
 (defmacro %with-command-buffer ((buffer digest class command &rest params) &body body)
-    "Create a buffer pre-filled with a PJLink command using `digest`, `class`, `command` and `params`
+  "Create a buffer pre-filled with a PJLink command using `digest`, `class`, `command` and `params`
 eg.
   %1CLSS ?<Return>"
   (with-gensyms (digest-sym class-sym command-sym idx)
@@ -210,7 +260,7 @@ eg.
        (char= (char response 6) #\=)
        (- len 7)))
 
-(defun %pjlink-get (stream digest class command args)
+(defun %pjlink-get (host stream digest class command args)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
@@ -233,19 +283,17 @@ returns the string \"0\""
            (param-len (%validate-get-result class command in rlen)))
       (unless param-len
         (if (string-equal in "PJLINK ERRA" :end1 rlen)
-            (error "Authentication error")
+            (error 'authorization-error :host host :class class :command command)
             (error "Bad get response: '~A'" (subseq in 0 rlen))))
       (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
-        (error
-         (format nil "get '~A'(~D): ~A" command class
-                 (ecase (char in 10)
-                   (#\1 "Undefined command")
-                   (#\2 "Out of parameter")
-                   (#\3 "Unavailable time")
-                   (#\4 "Projector/Display failure")))))
+        (ecase (char in 10)
+          (#\1 (error 'undefined-command-error :host host :class class :command command))
+          (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter args))
+          (#\3 (error 'unavailable-time-error :host host :class class :command command))
+          (#\4 (error 'projector-display-error :host host :class class :command command))))
       (subseq in 7 (+ 7 param-len)))))
 
-(defun %pjlink-set (stream digest class command params)
+(defun %pjlink-set (host stream digest class command params)
   "Conducts a `set` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
@@ -270,16 +318,14 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
            (param-len (%validate-get-result class command in rlen)))
       (unless param-len
         (if (string-equal in "PJLINK ERRA" :end1 rlen)
-            (error "Authentication error")
+            (error 'authorization-error :host host :class class :command command)
             (error "Bad set response: '~A'" (subseq in 0 rlen))))
       (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
-        (error
-         (format nil "set '~A'(~D) '~A': ~A" command class params
-                 (ecase (char in 10)
-                   (#\1 "Undefined command")
-                   (#\2 "Out of parameter")
-                   (#\3 "Unavailable time")
-                   (#\4 "Projector/Display failure")))))
+        (ecase (char in 10)
+          (#\1 (error 'undefined-command-error :host host :class class :command command))
+          (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter params))
+          (#\3 (error 'unavailable-time-error :host host :class class :command command))
+          (#\4 (error 'projector-display-error :host host :class class :command command))))
       (unless (and (= param-len 2) (string-equal in "OK" :start1 7 :end1 9))
         (error "set '~A' failed with response '~A'" command (subseq in 7 (+ 7 param-len))))
       (values))))
@@ -339,7 +385,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
              (let ((,result-var
                      (%with-pjlink-connection (,stream ,digest)
                          (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
-                       (%pjlink-get ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
+                       (%pjlink-get ,host ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
                ,@decl
                ,@body))
            (defmethod ,name (,@input-args (,config pjlink-config) &key)
@@ -347,7 +393,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
              (let ((,result-var
                      (%with-pjlink-connection (,stream ,digest)
                          ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
-                       (%pjlink-get ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
+                       (%pjlink-get (host ,config) ,stream ,digest ,class ,command (,input-transform-fn ,@input-args)))))
                ,@decl
                ,@body)))))))
 
@@ -368,12 +414,12 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
            ,@decl
            (%with-pjlink-connection (,stream ,digest)
                (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
-             (%pjlink-set ,stream ,digest ,class ,command (progn ,@body)))
+             (%pjlink-set ,host ,stream ,digest ,class ,command (progn ,@body)))
            (values))
          (defmethod ,name (,@args (,config pjlink-config) &key)
            ,doc
            ,@decl
            (%with-pjlink-connection (,stream ,digest)
                ((host ,config) :password (password ,config) :port (port ,config) :local-host (local-host ,config) :local-port (local-port ,config))
-             (%pjlink-set ,stream ,digest ,class ,command (progn ,@body)))
+             (%pjlink-set (host ,config) ,stream ,digest ,class ,command (progn ,@body)))
            (values))))))

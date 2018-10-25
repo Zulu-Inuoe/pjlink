@@ -12,6 +12,22 @@
    #:local-host
    #:local-port
 
+   #:projector-command-error
+   #:projector-command-error-host
+   #:projector-command-error-class
+   #:projector-command-error-command
+
+   #:authorization-error
+
+   #:undefined-command-error
+
+   #:out-of-parameter-error
+   #:out-of-parameter-error-parameter
+
+   #:unavailable-time-error
+
+   #:projector-display-error
+
    ;;; Class 1
    #:power-status
    #:input-type
