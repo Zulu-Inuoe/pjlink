@@ -1,6 +1,8 @@
 ql alexandria :latest
+ql bordeaux-threads :latest
 ql flexi-streams :latest
 ql ip-interfaces :latest
 ql md5 :latest
 ql split-sequence :latest
+ql trivial-garbage :latest
 ql usocket :latest

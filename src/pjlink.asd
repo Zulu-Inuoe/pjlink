@@ -12,8 +12,10 @@
    (:file "class2"))
   :depends-on
   (#:alexandria
+   #:bordeaux-threads
    #:flexi-streams
    #:ip-interfaces
    #:md5
    #:split-sequence
+   #:trivial-garbage
    #:usocket))

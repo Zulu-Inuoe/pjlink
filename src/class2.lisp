@@ -184,21 +184,22 @@ false if freeze is OFF"
 
 ;;; Search protocol
 
-(defun %validate-search-ack (class response len)
+(defun %validate-search-ack (response len)
   (and (= len 25)
-       (char= (char response 0) #\%)
-       (char= (char response 1) (code-char (+ (char-code #\0) class)))
-       (string-equal response "ACKN=" :start1 2 :end1 7)))
+       (string-equal response "%2ACKN=" :end1 7)))
+
+(defun %parse-mac-address (buf &key (start 0))
+  (let ((mac (make-array 6 :element-type '(unsigned-byte 8))))
+    (setf (aref mac 0) (parse-integer buf :start (+ start 0) :end (+ start 2) :radix 16)
+          (aref mac 1) (parse-integer buf :start (+ start 3) :end (+ start 5) :radix 16)
+          (aref mac 2) (parse-integer buf :start (+ start 6) :end (+ start 8) :radix 16)
+          (aref mac 3) (parse-integer buf :start (+ start 9) :end (+ start 11) :radix 16)
+          (aref mac 4) (parse-integer buf :start (+ start 12) :end (+ start 14) :radix 16)
+          (aref mac 5) (parse-integer buf :start (+ start 15) :end (+ start 17) :radix 16))
+    mac))
 
 (defun %parse-search-ack (response)
-  (let ((mac (make-array 6 :element-type '(unsigned-byte 8))))
-    (setf (aref mac 0) (parse-integer response :start 7 :end 9 :radix 16)
-          (aref mac 1) (parse-integer response :start 10 :end 12 :radix 16)
-          (aref mac 2) (parse-integer response :start 13 :end 15 :radix 16)
-          (aref mac 3) (parse-integer response :start 16 :end 18 :radix 16)
-          (aref mac 4) (parse-integer response :start 19 :end 21 :radix 16)
-          (aref mac 5) (parse-integer response :start 22 :end 24 :radix 16))
-    mac))
+  (%parse-mac-address response :start 7))
 
 (defun %normalize-hostname (host)
   "Returns a normalized octet vector representation of host"
@@ -282,7 +283,194 @@ use the general broadcast address instead.
                   (multiple-value-bind (buf len remote-host remote-port)
                       (usocket:socket-receive socket buf (length buf) :element-type 'character)
                     (declare (ignore remote-port))
-                    (when (%validate-search-ack 2 buf len)
+                    (when (%validate-search-ack buf len)
                       (let ((mac-address (%parse-search-ack buf)))
                         (cons remote-host mac-address))))))
             :collect :it)))))
+
+(defclass status-listener ()
+  ((%lock
+    :type bt:lock
+    :initform (bt:make-lock))
+   (%address
+    :type hostname
+    :initarg :address
+    :initform (error "Must specify address"))
+   (%port
+    :type integer
+    :initarg :port
+    :initform (error "Must specify port"))
+   (%handlers-ptr
+    :type cons
+    :initform (cons nil nil))
+   (%end-thread-fn-ptr
+    :type cons
+    :initform (cons nil nil))))
+
+(deftype status-event ()
+  '(member :lkup :erst :powr :inpt))
+
+(deftype status-handler ()
+  '(or symbol (function (hostname status-event t))))
+
+(defun make-status-listener (&key handlers local-host (port +pjlink-port+))
+  "Creates a projector status listener listening on `local-host'.
+`handlers' is either a `status-handler' handler or a list of `status-handler's
+  these handlers will be initially registered as `add-handler'
+if `handlers' is non-nil, the listener will be started, as per `start-listener'"
+  (let* ((handlers (ensure-list handlers))
+         (listener
+            (make-instance 'status-listener :address local-host :port port)))
+    (when handlers
+      (dolist (h handlers)
+        (add-handler listener h))
+      (start-listener listener))
+    listener))
+
+(defun add-handler (status-listener handler)
+  "Add a `status-handler' to `status-listener'."
+  (with-slots (%lock %handlers-ptr)
+      status-listener
+    (bt:with-lock-held (%lock)
+      (push handler (car %handlers-ptr))))
+  (values))
+
+(defun remove-handler (status-listener handler)
+  "Remove a `status-handler' from a `status-listener'."
+  (with-slots (%lock %handlers-ptr)
+      status-listener
+    (bt:with-lock-held (%lock)
+      (setf (car %handlers-ptr) (remove handler (car %handlers-ptr)))))
+  (values))
+
+(defun %notify-handlers (handlers remote-host event-type args)
+  (dolist (h handlers)
+    (handler-case
+        (funcall h remote-host event-type args)
+      (error (e)
+        (declare (ignore e))
+        (values)))))
+
+(defun %parse-lkup-status (buf len)
+  (cond
+    ((= len 25)
+     (values :lkup (%parse-mac-address buf :start 7)))
+    (t
+     (values nil nil))))
+
+(defun %parse-erst-status (buf len)
+  (cond
+    ((= len 14)
+     (values :erst
+             (list
+              (cons :fan (%erst->sym (char buf 7)))
+              (cons :lamp (%erst->sym (char buf 8)))
+              (cons :temperature (%erst->sym (char buf 9)))
+              (cons :cover-open (%erst->sym (char buf 10)))
+              (cons :filter (%erst->sym (char buf 11)))
+              (cons :other (%erst->sym (char buf 12))))))
+    (t
+     (values nil nil))))
+
+(defun %parse-powr-status (buf len)
+  (cond
+    ((= len 9)
+     (values :powr (%powr->sym (char buf 7))))
+    (t
+     (values nil nil))))
+
+(defun %parse-inpt-status (buf len)
+  (cond
+    ((= len 10)
+     (values :inpt
+             (cons
+              (%input2->sym (char buf 7))
+              (parse-integer buf :start 8 :end 9 :radix 36))))
+    (t
+     (values nil nil))))
+
+(defun %validate-and-parse-status (buf len)
+  (when (>= len 8)
+    (switch (buf :test (lambda (a b)
+                         (string-equal a b :end1 7)))
+      ("%2LKUP="
+       (%parse-lkup-status buf len))
+      ("%2ERST="
+       (%parse-erst-status buf len))
+      ("%2POWR="
+       (%parse-powr-status buf len))
+      ("%2INPT="
+       (%parse-inpt-status buf len))
+      (t
+       (values nil nil)))))
+
+(defun %make-listener-thread (running-ptr handlers-ptr socket)
+  (bt:make-thread
+   (lambda ()
+     (let ((buf (make-array 256 :element-type 'character)))
+       (declare (dynamic-extent buf))
+       (loop
+         :while (car running-ptr)
+         :do
+            (handler-case
+                (when-let ((ready (usocket:wait-for-input socket :ready-only t)))
+                  (multiple-value-bind (buf len remote-host remote-port)
+                      (usocket:socket-receive socket buf (length buf) :element-type 'character)
+                    (declare (ignore remote-port))
+                    (multiple-value-bind (event-type args)
+                        (%validate-and-parse-status buf len)
+                      (when event-type
+                        (%notify-handlers (car handlers-ptr) remote-host event-type args)))))
+              (error (e)
+                (declare (ignore e))
+                (values))))))))
+
+(defun %make-end-thread-fn (running-ptr thread socket address port)
+  (lambda ()
+    (setf (car running-ptr) nil)
+    ;;hacky hack hack hack to get the wait to finish
+    (usocket:socket-send socket "0" 1 :host (or address "localhost") :port port)
+    (when (bt:thread-alive-p thread)
+      (bt:join-thread thread))
+    (usocket:socket-close socket)))
+
+(defun %make-finalizer (running-ptr socket)
+  (lambda ()
+    (when (car running-ptr)
+      (setf (car running-ptr) nil)
+      (usocket:socket-close socket))))
+
+(defun start-listener (status-listener)
+  "Start a `status-listener' if it is not already started.
+This will cause incoming status notifications to alert any registered handlers."
+  (bt:with-lock-held ((slot-value status-listener '%lock))
+    (let ((end-thread-fn-ptr (slot-value status-listener '%end-thread-fn-ptr)))
+      (unless (car end-thread-fn-ptr)
+        (let* ((address (slot-value status-listener '%address))
+               (port (slot-value status-listener '%port))
+               (socket (usocket:socket-connect nil nil :protocol :datagram :element-type 'character :local-host address :local-port port))
+               (thread nil)
+               (running-ptr (cons t nil))
+               (handlers-ptr (slot-value status-listener '%handlers-ptr))
+               (ok nil))
+          (unwind-protect
+               (progn
+                 (setf (car end-thread-fn-ptr) (%make-end-thread-fn running-ptr thread socket address port))
+                 (setf thread (%make-listener-thread running-ptr handlers-ptr socket))
+                 (setf ok t))
+            (unless ok
+              (setf (car end-thread-fn-ptr) nil)
+              (usocket:socket-close socket)))
+          (trivial-garbage:finalize status-listener (%make-finalizer running-ptr socket))))))
+  status-listener)
+
+(defun stop-listener (status-listener)
+  "Stop a `status-listener' if it is not already stopped.
+This will cease listening for status notification updates."
+  (with-slots (%lock %end-thread-fn-ptr)
+      status-listener
+    (bt:with-lock-held (%lock)
+      (when (car %end-thread-fn-ptr)
+        (funcall (car %end-thread-fn-ptr))
+        (setf (car %end-thread-fn-ptr) nil))))
+  (values))
