@@ -4,27 +4,71 @@
 
 (deftype power-status ()
   "Power status of a projector.
-see `power-on', `power-off', and `get-power-status'"
+
+see `power-on'
+see `power-off'
+see `get-power-status'"
   '(member :standby :lamp-on :cooling :warm-up))
 
 (deftype input-type ()
   "An input type for a projector.
-Note that a projector may have several inputs of the same type, identified by an `input-number`
-see `get-input', `set-input', and `get-inputs'"
+Note that a projector may have several inputs of the same type, identified by an `input-number'
+
+see `set-projector-input'"
   '(member :rgb :video :digital :storage :network))
+
+(deftype input-number ()
+  "Input number for a projector
+
+see `set-projector-input'"
+  '(integer 1 9))
+
+(deftype projector-input ()
+  "A cons of (`input-type' . `input-number')
+eg.
+'(:digital . 5)
+
+see `get-projector-input2'
+see `set-projector-input2*'
+see `get-projector-inputs2'"
+  'cons)
 
 (deftype av-mute-status ()
   "Status of the audio-video mute setting on a projector.
 Audio-video mute will cease output of audio or video, without powering off the projector.
+
 see `get-av-mute'
 see `set-av-mute'"
   '(member :vm-on :am-on :avm-on :avm-off))
 
+(deftype error-component ()
+  "A component of a projector that can be reported
+
+see `get-error-status'
+see `projector-status'
+see `error-status'"
+  '(member  :fan  :lamp  :temperature  :cover-open  :filter  :other))
+
 (deftype error-status ()
   "Status of a component of a projector.
+
 see `get-error-status'
 see `projector-status'"
   '(member nil :warning :error))
+
+(deftype projector-status ()
+  "An alist representing the projector error state.
+the keys are `error-component' and values `error-status'
+eg.
+'((:fan . nil)
+  (:lamp . nil)
+  (:temperature . :warning)
+  (:cover-open . nil)
+  (:filter . :error)
+  (:other . nil))
+
+see `get-error-status'"
+  'list)
 
 (defun %powr->sym (input-val)
   (ecase input-val

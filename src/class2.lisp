@@ -5,13 +5,62 @@
 (deftype input-type2 ()
   "An input type for a class2 projector, adding `:internal'
 Note that a projector may have several inputs of the same type, identified by an `input-number`
-see `input-type'
-see `get-input2', `set-input2', and `get-inputs2'"
+
+see `set-projector-input2'"
   '(or input-type (eql :internal)))
 
+(deftype input-number2 ()
+  "An input number for class 2 projectors, expanding the range of input numbers to [1, 35].
+
+see `set-projector-input2'"
+  '(integer 1 35))
+
+(deftype projector-input2 ()
+  "A cons of (`input-type2' . `input-number2')
+
+eg.
+'(:internal . 30)
+
+see `get-projector-input2'
+see `set-projector-input2*'
+see `get-projector-inputs2'"
+  'cons)
+
+(deftype projector-resolution ()
+  "Resolution of a projector, as:
+  a cons of (<horz-resolution> . <vert-resolution>)
+  :no-signal if no signal is available
+  :unknown-signal if the signal is unknown
+
+see `get-resolution'
+see `get-recommended-resolution'"
+  '(or cons (member :no-signal :unknown-signal)))
+
 (deftype mac-address ()
-  "A MAC address as a vector of 6 octets."
+  "A MAC address as a vector of 6 octets.
+
+see `search-projectors'"
   '(vector (unsigned-byte 8) 6))
+
+(deftype status-event ()
+  "A keyword denoting a notification event type from the projector.
+
+see `make-status-listener'"
+  '(member :lkup :erst :powr :inpt))
+
+(deftype status-handler ()
+  "A function-designator for a function of three arguments:
+remote-host: a `hostname' representing the origin of the status update
+event-type: a `status-event' representing the status notification
+arg: an object representing the event status, depending on `event-type':
+
+  :lkup - the `mac-address' of the projector
+  :erst - `projector-status'
+  :powr - `power-status'
+  :inpt - `projector-input2'
+
+see `make-status-listener'"
+  '(or symbol function))
 
 (defun %input2->sym (input-val)
   (ecase input-val
@@ -72,9 +121,9 @@ eg
 ;;; Class 2 commands
 
 (%defpjlink-set set-input2 (2 "INPT") (input-type input-number)
-  "Sets the input to the given `input-type2' and `input-number'
-see `input-type2'
-see `set-input2*', `get-input2'"
+  "Sets the input to the given `input-type2' and `input-number2'
+see `set-input2*'
+see `get-input2'"
   (%input2->string input-type input-number))
 
 (%defpjlink-set set-input2* (2 "INPT") (input-info)
@@ -130,7 +179,7 @@ nil if not available."
     (t (%res-str->resolution result))))
 
 (%defpjlink-get get-recommended-resolution (2 "RRES") nil (result)
-  "Get the recommended resolution for the projector."
+  "Get the recommended `resolution' for the projector."
   (unless (zerop (length result))
     (%res-str->resolution result)))
 
@@ -306,12 +355,6 @@ use the general broadcast address instead.
    (%end-thread-fn-ptr
     :type cons
     :initform (cons nil nil))))
-
-(deftype status-event ()
-  '(member :lkup :erst :powr :inpt))
-
-(deftype status-handler ()
-  '(or symbol (function (hostname status-event t))))
 
 (defun make-status-listener (&key handlers local-host (port +pjlink-port+))
   "Creates a projector status listener listening on `local-host'.

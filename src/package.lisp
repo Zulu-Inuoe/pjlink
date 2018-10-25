@@ -12,11 +12,15 @@
    #:local-host
    #:local-port
 
-   ;; Class 1
+   ;;; Class 1
    #:power-status
    #:input-type
+   #:input-number
+   #:projector-input
    #:av-mute-status
+   #:error-component
    #:error-status
+   #:projector-status
 
    #:power-on
    #:power-off
@@ -34,8 +38,13 @@
    #:get-product-name
    #:get-pjlink-class
 
-   ;; Class 2
+   ;;; Class 2
    #:input-type2
+   #:input-number2
+   #:projector-input2
+   #:projector-resolution
+   #:mac-address
+   #:status-event
 
    #:set-input2
    #:set-input2*
@@ -58,4 +67,13 @@
    #:unfreeze-screen
    #:get-freeze-status
 
-   #:search-projectors))
+   #:search-projectors
+
+   ;; Status notification protocol
+   #:status-listener
+   #:make-status-listener
+   #:status-handler
+   #:add-handler
+   #:remove-handler
+   #:start-listener
+   #:stop-listener))
