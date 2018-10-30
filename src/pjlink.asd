@@ -1,6 +1,7 @@
 (defsystem #:pjlink
   :version "1.0.0"
-  :description ""
+  :description "A library for communicating with PJLink-compatible projectors over TCP/IP.
+see https://pjlink.jbmia.or.jp/english/ for information on PJLink and compatible devices."
   :author "Wilfredo Velázquez-Rodríguez <zulu.inuoe@gmail.com>"
   :license "CC0 1.0 Universal"
   :serial t
