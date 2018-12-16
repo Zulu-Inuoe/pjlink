@@ -101,9 +101,11 @@ Class 2 adds functionality in the form of being able to query LAN projectors and
 ### Search Procedure
 Projectors on the LAN can be queried by using the class 2 search procedure.
 
-Note: It is highly recommend to specify an interface (network card) to conduct the search, as it is based on UDP broadcast and will not route properly otherwise.
-Note: This is a synchronous, 30 second call as per the spec
-Note: Because the search procedure uses the same port as status notification, currently there's no way to conduct a search while a status listener is active.
+**Note:** It is highly recommend to specify an interface (network card) to conduct the search, as it is based on UDP broadcast and will not route properly otherwise.
+
+**Note:** This is a synchronous, 30 second call as per the spec
+
+**Note:** Because the search procedure uses the same port as status notification, currently there's no way to conduct a search while a status listener is active.
 
 ``` common-lisp
 (pjlink:search-projectors :local-host *interface-address*)
@@ -119,7 +121,7 @@ The return value here is a list of projector IP's and mac-addresses
 A `status-listener` can be created to asynchronously monitor projector status. These updates have to be configured on the projector in a model-specific fashion so that they notify a host of status updates via UDP.
 Creating and starting a listener will create a background worker thread to monitor this socket and signal an event when a status update occurs:
 
-Note: It is highly recommended to specify an interface (network card) to listen on, rather than using the 'default' network interface.
+**Note:** It is highly recommended to specify an interface (network card) to listen on, rather than using the 'default' network interface.
 
 ``` common-lisp
 (defun print-pjlink-event (remote-host event-type args)
@@ -141,6 +143,7 @@ Note: It is highly recommended to specify an interface (network card) to listen 
 * [alexandria](http://quickdocs.org/alexandria/)
 * [bordeaux-threads](https://github.com/sionescu/bordeaux-threads)
 * [flexi-streams](http://quickdocs.org/flexi-streams/)
+* [ip-interfaces](http://quickdocs.org/ip-interfaces/)
 * [md5](http://quickdocs.org/md5/)
 * [split-sequence](http://quickdocs.org/split-sequence/)
 * [trivial-garbage](https://github.com/trivial-garbage/trivial-garbage)
