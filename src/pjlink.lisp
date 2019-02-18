@@ -61,7 +61,7 @@
     :initform nil
     :accessor local-host)
    (%local-port
-    :type hostname
+    :type (or null integer)
     :initarg :local-port
     :initform nil
     :accessor local-port))
