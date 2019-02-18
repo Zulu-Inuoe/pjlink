@@ -14,7 +14,6 @@ see https://pjlink.jbmia.or.jp/english/ for information on PJLink and compatible
   :depends-on
   (#:alexandria
    #:bordeaux-threads
-   #:flexi-streams
    #:ip-interfaces
    #:md5
    #:split-sequence

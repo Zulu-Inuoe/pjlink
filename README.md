@@ -142,7 +142,6 @@ Creating and starting a listener will create a background worker thread to monit
 # Dependencies
 * [alexandria](http://quickdocs.org/alexandria/)
 * [bordeaux-threads](https://github.com/sionescu/bordeaux-threads)
-* [flexi-streams](http://quickdocs.org/flexi-streams/)
 * [ip-interfaces](http://quickdocs.org/ip-interfaces/)
 * [md5](http://quickdocs.org/md5/)
 * [split-sequence](http://quickdocs.org/split-sequence/)
