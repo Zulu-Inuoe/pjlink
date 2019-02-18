@@ -208,45 +208,42 @@ Otherwise calculates the response by prepending the seed from the connection res
     :finally
        (return i)))
 
-(defmacro %with-command-buffer ((buffer len digest class command &rest params) &body body)
-  "Create a buffer pre-filled with a PJLink command using `digest`, `class`, `command` and `params`
+(defun %write-command (stream digest class command &rest params)
+  "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
 eg.
   %1CLSS ?<Return>"
-  (with-gensyms (digest-sym class-sym command-sym)
-    `(let ((,digest-sym ,digest)
-           (,class-sym ,class)
-           (,command-sym ,command)
-           (,buffer (make-array 168 :element-type 'character))
-           (,len 0))
-       (declare (dynamic-extent ,buffer))
-       (declare (type (integer 0 168) ,len))
-       ;;Prepend the digest (if any)
-       (replace ,buffer ,digest-sym)
-       (incf ,len (length ,digest-sym))
+  (declare (type stream stream)
+           (type (or (string 0) (string 32)) digest)
+           (type (integer 1 2) class)
+           (type (string 4) command))
+  (let ((buf (make-array 168 :element-type 'character))
+        (len 0))
+    (declare (dynamic-extent buf))
+    (declare (type (integer 0 168) len))
+    ;;Prepend the digest (if any)
+    (replace buf digest)
+    (incf len (length digest))
 
-       ;;Add %1
-       (setf (char ,buffer (1- (incf ,len))) #\%
-             (char ,buffer (1- (incf ,len))) (code-char (+ (char-code #\0) ,class-sym)))
+    ;;Add %1
+    (setf (char buf (1- (incf len))) #\%
+          (char buf (1- (incf len))) (code-char (+ (char-code #\0) class)))
 
-       ;;Add command type
-       (replace ,buffer ,command-sym :start1 ,len)
-       (incf ,len (length ,command-sym))
+    ;;Add command type
+    (replace buf command :start1 len)
+    (incf len (length command))
 
-       ;;Space
-       (setf (char ,buffer (1- (incf ,len))) #\Space)
+    ;;Space
+    (setf (char buf (1- (incf len))) #\Space)
 
-       ;;Add params
-       ,@(with-gensyms (params-sym)
-           (loop
-             :for p :in params
-             :collecting
-             `(let ((,params-sym ,p))
-                (replace ,buffer ,params-sym :start1 ,len)
-                (incf ,len (length ,params-sym)))))
+    ;;Add params
+    (dolist (p params)
+      (replace buf p :start1 len)
+      (incf len (length p)))
 
-       ;;End with #\Return
-       (setf (char ,buffer (1- (incf ,len))) #\Return)
-       (locally ,@body))))
+    ;;End with #\Return
+    (setf (char buf (1- (incf len))) #\Return)
+    (write-sequence buf stream :end len)
+    (finish-output stream)))
 
 (defmacro %with-response-buffer (buffer &body body)
   `(let ((,buffer (make-array 136 :element-type 'character)))
@@ -275,9 +272,7 @@ This will issue a query such as
 Then given a result of
   %1POWR=0
 returns the string \"0\""
-  (%with-command-buffer (buf len digest class command "?" args)
-    (write-sequence buf stream :end len)
-    (finish-output stream))
+  (%write-command stream digest class command "?" args)
   (%with-response-buffer in
     ;;Get the response params
     (let* ((rlen (%read-pjlink-command-line in stream))
@@ -310,9 +305,7 @@ Then given a result of
   %1POWR=OK
 will return no values.
 Will error on error responses such as ERR1, ERRA, ERR3 etc."
-  (%with-command-buffer (buf len digest class command params)
-    (write-sequence buf stream :end len)
-    (finish-output stream))
+  (%write-command stream digest class command params)
   (%with-response-buffer in
     ;;Get the response params
     (let* ((rlen (%read-pjlink-command-line in stream))
