@@ -5,12 +5,14 @@
   (:export
    #:hostname
 
-   #:pjlink-config
+   ;; host-info
    #:host
    #:port
    #:password
    #:local-host
    #:local-port
+
+   #:pjlink-config
 
    #:projector-command-error
    #:projector-command-error-host
