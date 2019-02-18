@@ -6,7 +6,7 @@ PJLink projectors operate over TCP/IP.
 #### Table of Contents
 * [Overview](#overview)
 * [Usage](#usage)
-  * [Authentication](#authentication)
+  * [Connection Parameters](#connection-parameters)
   * [Class 2](#class-2)
     * [Search Procedure](#search-procedure)
     * [Status Notification](#status-notification)
@@ -17,6 +17,7 @@ PJLink projectors operate over TCP/IP.
 This library implements both [class 1](https://pjlink.jbmia.or.jp/english/data/5-1_PJLink_eng_20131210.pdf) and [class 2](https://pjlink.jbmia.or.jp/english/data_cl2/PJLink_5-1.pdf) support, in which you can:
 
 Class 1:
+
 * Query power status and power projector on/off
 * Query current and available inputs, and set active input
 * Query and set audio-video mute status
@@ -25,6 +26,7 @@ Class 1:
 * Query projector, manufacturer, and product names.
 
 Class 2:
+
 * LAN Projector discovery.
 * Projector status notifications.
 * Serial version query.
@@ -36,55 +38,75 @@ Class 2:
 
 
 # Usage
-Code examples have `*projector-ip*` bound to the IP of the projector, eg "192.168.1.2"
+Code examples have `*ip*` bound to the IP of the projector, eg `"192.168.1.2"`
 
 ``` common-lisp
 ;; Get power status
-(pjlink:get-power-status *projector-ip*)
+(pjlink:get-power-status *ip*)
 ;; =>
 :STANDBY
 
 ;; Turn projector on
-(pjlink:turn-on *projector-ip*)
+(pjlink:turn-on *ip*)
 
-(pjlink:get-power-status *projector-ip*)
+(pjlink:get-power-status *ip*)
 ;; =>
 :WARM-UP
 
 ;; After some time
-(pjlink:get-power-status *projector-ip*)
+(pjlink:get-power-status *ip*)
 ;; =>
 :LAMP-ON
 
 
 ;; Query available inputs
-(pjlink:get-inputs *projector-ip*)
+(pjlink:get-inputs *ip*)
 ;; =>
 ((:RGB . 1) (:VIDEO . 2) (:DIGITAL . 3) (:STORAGE . 4) (:RGB . 2) (:VIDEO . 6) (:DIGITAL . 7))
 
 ;; Set the input to one of them
-(pjlink:set-input '(:video . 6) *projector-ip*)
+(pjlink:set-input '(:video . 6) *ip*)
 
 ;; Get the currently active input
-(pjlink:get-input *projector-ip*)
+(pjlink:get-input *ip*)
 ;; =>
 (:VIDEO . 6)
-
 ```
 
-## Authentication
-All pjlink operations accept a `:password` parameter:
+## Connection Parameters
+In addition to parameters for the commands themselves and the host designator,
+all of the PJlink commands accept a 'host designator' and the following keyword parameters:
+
+* **port** - Port to connect to. Defaults to PJLink port (4352)
+* **password** - Password to use if authentication is required
+* **local-hort** - Local interface to use for the connection
+* **local-port** - Local port to use for the connection
+
+Each of these parameters has a corresponding generic function you may specialize
+in order to make it easier to pass along similar parameters, or to customize eg
+password retrieval:
 
 ``` common-lisp
-(pjlink:set-av-mute :avmt-on *projector-ip*" :password "JBMIAProjectorLink")
+(defclass my-pjlink-host ()
+  ())
+
+(defmethod pjlink:host ((obj my-pjlink-host))
+  *ip*)
+
+(defmethod pjlink:password ((obj my-pjlink-host))
+  "Get the password by reading it from the user"
+  (read-password-from-user))
+
+;; ...
+
+(pjlink:power-on (make-instance 'my-pjlink-host))
 ```
 
-
-Alternatively, all operations support taking in an object of class `pjlink:pjlink-config`:
+The class `pjlink-config` is provided as a simple container:
 
 ``` common-lisp
 (let ((config (make-instance 'pjlink:pjlink-config
-                             :host *projector-ip*
+                             :host *ip*
                              :password "JBMIAProjectorLink)))
   ;;Set the input to one of the available ones
   (let ((inputs (pjlink:get-inputs config)))
@@ -93,10 +115,8 @@ Alternatively, all operations support taking in an object of class `pjlink:pjlin
   (pjlink:power-off config))
 ```
 
-This prevents having to pass around connection information such as host and password information.
-
 ## Class 2
-Class 2 adds functionality in the form of being able to query LAN projectors and receive notifications.
+Class 2 the ability to query the LAN for projectors and receive notifications.
 
 ### Search Procedure
 Projectors on the LAN can be queried by using the class 2 search procedure.
