@@ -165,7 +165,7 @@ And password a sequence of characters length 32 or less."
     (declare (dynamic-extent buffer))
     (replace buffer connection-response :start2 9 :end2 17)
     (replace buffer password :start1 8 :end2 plen)
-    (values (%md5->hex-str (md5:md5sum-string buffer :end (+ 8 plen))))))
+    (%md5->hex-str (md5:md5sum-string buffer :end (+ 8 plen)))))
 
 (defun %verify-connect-response (response rlen)
   "Verifies the initial connection response.
