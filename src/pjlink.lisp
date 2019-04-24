@@ -156,23 +156,8 @@ nil if no password is to be used.")
 
 (defun %nibble->hex (nibble)
   "Convert a nibble into its hex char."
-  (ecase nibble
-    (0 #\0)
-    (1 #\1)
-    (2 #\2)
-    (3 #\3)
-    (4 #\4)
-    (5 #\5)
-    (6 #\6)
-    (7 #\7)
-    (8 #\8)
-    (9 #\9)
-    (10 #\a)
-    (11 #\b)
-    (12 #\c)
-    (13 #\d)
-    (14 #\e)
-    (15 #\f)))
+  (check-type nibble (unsigned-byte 4))
+  (char "0123456789abcdef" nibble))
 
 (defun %md5->hex-str (md5)
   "Convert a 16-octet md5 hash into a 32-char hex-encoded string."
