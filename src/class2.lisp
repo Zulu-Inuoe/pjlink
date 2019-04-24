@@ -513,6 +513,7 @@ This will cease listening for status notification updates."
       status-listener
     (bt:with-lock-held (%lock)
       (when (car %end-thread-fn-ptr)
+        (trivial-garbage:cancel-finalization status-listener)
         (funcall (car %end-thread-fn-ptr))
         (setf (car %end-thread-fn-ptr) nil))))
   (values))
