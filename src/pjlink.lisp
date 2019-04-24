@@ -392,7 +392,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
                      &aux
                        (host (host host-info))
                        (,args ,(if input-transform `(progn ,@transform-body) "")))
-         ,doc
+         ,@(ensure-list doc)
          (let ((,result-var
                  (%with-pjlink-connection (,stream ,digest)
                      (host :password password :port port :local-host local-host :local-port local-port)
@@ -413,7 +413,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
                        (local-port (local-port host-info))
                      &aux
                        (host (host host-info)))
-         ,doc
+         ,@(ensure-list doc)
          ,@decl
          (%with-pjlink-connection (,stream ,digest)
              (host :password password :port port :local-host local-host :local-port local-port)
