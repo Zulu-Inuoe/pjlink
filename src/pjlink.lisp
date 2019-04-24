@@ -162,7 +162,7 @@ nil if no password is to be used.")
 (defun %md5->hex-str (md5)
   "Convert a 16-octet md5 hash into a 32-char hex-encoded string."
   (loop
-    :with hex-digest := (make-array 32 :element-type 'character)
+    :with hex-digest := (make-string 32)
     :for nidx :from 0 :below 16
     :for hidx :from 0 :below 32 :by 2
     :do
@@ -176,7 +176,7 @@ nil if no password is to be used.")
 `connection-response' should be a sequence like
 PJLINK 1 <SEED>
 And password a sequence of characters length 32 or less."
-  (let ((buffer (make-array 40 :element-type 'character)))
+  (let ((buffer (make-string 40)))
     (declare (dynamic-extent buffer))
     (replace buffer connection-response :start2 9 :end2 17)
     (replace buffer password :start1 8 :end2 plen)
@@ -231,7 +231,7 @@ eg.
            (type (or (string 0) (string 32)) digest)
            (type (integer 1 2) class)
            (type (string 4) command))
-  (let ((buf (make-array 168 :element-type 'character))
+  (let ((buf (make-string 168))
         (len 0))
     (declare (dynamic-extent buf))
     (declare (type (integer 0 168) len))
@@ -261,7 +261,7 @@ eg.
     (finish-output stream)))
 
 (defmacro %with-response-buffer (buffer &body body)
-  `(let ((,buffer (make-array 136 :element-type 'character)))
+  `(let ((,buffer (make-string 136)))
      (declare (dynamic-extent ,buffer))
      ,@body))
 
@@ -341,7 +341,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
 
 (defun %read-line-and-generate-digest (stream password)
   ;;Read the initial connection line and figure out the digest to use
-  (let ((buffer (make-array 18 :element-type 'character)))
+  (let ((buffer (make-string 18)))
     (declare (dynamic-extent buffer))
     (let ((rlen (%read-pjlink-command-line buffer stream)))
       (unless (%verify-connect-response buffer rlen)

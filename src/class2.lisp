@@ -313,11 +313,10 @@ use the general broadcast address instead.
                                                             :local-host address
                                                             :local-port port))
       (setf (usocket:socket-option socket :broadcast) t)
-      (let ((buf (make-array 7 :element-type 'character :initial-contents #(#\% #\2 #\S #\R #\C #\H #\Return))))
-        (declare (dynamic-extent buf))
+      (let ((buf #.(format nil "%2SRCH~C" #\Return)))
         (usocket:socket-send socket buf (length buf) :host broadcast-address :port port))
 
-      (let ((buf (make-array 40 :element-type 'character)))
+      (let ((buf (make-string 40)))
         (declare (dynamic-extent buf))
         (loop
           :for remaining-time := 30
@@ -450,7 +449,7 @@ if `handlers' is non-nil, the listener will be started, as per `start-listener'"
 (defun %make-listener-thread (running-ptr handlers-ptr socket)
   (bt:make-thread
    (lambda ()
-     (let ((buf (make-array 256 :element-type 'character)))
+     (let ((buf (make-string 256)))
        (declare (dynamic-extent buf))
        (loop
          :while (car running-ptr)
