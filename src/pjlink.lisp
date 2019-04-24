@@ -380,42 +380,42 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
          (usocket:socket-close ,socket)))))
 
 (defmacro %defpjlink-get (name (class command) (&whole input-transform &optional input-args &body transform-body) (result-var) &body body)
-  (with-gensyms (host-info port password local-host local-port host args stream digest)
+  (with-gensyms (args stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
-      `(defun ,name (,@input-args ,host-info
+      `(defun ,name (,@input-args host-info
                      &key
-                       ((:port ,port) (port ,host-info))
-                       ((:password ,password) (password ,host-info))
-                       ((:local-host ,local-host) (local-host ,host-info))
-                       ((:local-port ,local-port) (local-port ,host-info))
+                       (port (port host-info))
+                       (password (password host-info))
+                       (local-host (local-host host-info))
+                       (local-port (local-port host-info))
                      &aux
-                       (,host (host ,host-info))
+                       (host (host host-info))
                        (,args ,(if input-transform `(progn ,@transform-body) "")))
          ,doc
          (let ((,result-var
                  (%with-pjlink-connection (,stream ,digest)
-                     (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
-                   (%pjlink-get ,host ,stream ,digest ,class ,command ,args))))
+                     (host :password password :port port :local-host local-host :local-port local-port)
+                   (%pjlink-get host ,stream ,digest ,class ,command ,args))))
            ,@decl
            ,@body)))))
 
 (defmacro %defpjlink-set (name (class command) args &body body)
-  (with-gensyms (host-info port password local-host local-port host stream digest)
+  (with-gensyms (stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
       `(defun ,name (,@args
-                     ,host-info
+                     host-info
                      &key
-                       ((:port ,port) (port ,host-info))
-                       ((:password ,password) (password ,host-info))
-                       ((:local-host ,local-host) (local-host ,host-info))
-                       ((:local-port ,local-port) (local-port ,host-info))
+                       (port (port host-info))
+                       (password (password host-info))
+                       (local-host (local-host host-info))
+                       (local-port (local-port host-info))
                      &aux
-                       (,host (host ,host-info)))
+                       (host (host host-info)))
          ,doc
          ,@decl
          (%with-pjlink-connection (,stream ,digest)
-             (,host :password ,password :port ,port :local-host ,local-host :local-port ,local-port)
-           (%pjlink-set ,host ,stream ,digest ,class ,command (progn ,@body)))
+             (host :password password :port port :local-host local-host :local-port local-port)
+           (%pjlink-set host ,stream ,digest ,class ,command (progn ,@body)))
          (values)))))
