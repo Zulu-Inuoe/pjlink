@@ -42,11 +42,14 @@
 (defgeneric host (obj)
   (:documentation "Get the `hostname' designated by `obj'")
   (:method (obj)
+    "Use `obj' as a `hostname'."
+    (check-type obj hostname)
     obj))
 
 (defgeneric port (obj)
   (:documentation "Get the port designated by `obj'")
   (:method (obj)
+    "Use the default pjlink port."
     (declare (ignore obj))
     +pjlink-port+))
 
@@ -54,18 +57,21 @@
   (:documentation "Get the password designated by `obj'.
 nil if no password is to be used.")
   (:method (obj)
+    "Provide no password"
     (declare (ignore obj))
     nil))
 
 (defgeneric local-host (obj)
   (:documentation "Get the `local-host' designated by `obj'.")
   (:method (obj)
+    "No specific local-host"
     (declare (ignore obj))
     nil))
 
 (defgeneric local-port (obj)
   (:documentation "Get the `local-port' designated by `obj'.")
   (:method (obj)
+    "No specific local-port"
     (declare (ignore obj))
     nil))
 
