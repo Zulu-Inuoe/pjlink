@@ -266,26 +266,44 @@ eg.
     (write-sequence buf stream :end len)
     (finish-output stream)))
 
-(defmacro %with-response-buffer (buffer &body body)
-  `(let ((,buffer (make-string 136)))
-     (declare (dynamic-extent ,buffer))
-     ,@body))
-
-(defun %validate-get-result (class command response len)
+(defun %valid-command-response-p (class command response len)
   (and (>= len 7)
        (char= (char response 0) #\%)
        (char= (char response 1) (code-char (+ (char-code #\0) class)))
        (string-equal response command :start1 2 :end1 6)
-       (char= (char response 6) #\=)
-       (- len 7)))
+       (char= (char response 6) #\=)))
 
-(defun %pjlink-get (host stream digest class command args)
+(defun %check-command-response (host class command param response len)
+  "Verifies the response and signals errors if necessary"
+  (unless (%valid-command-response-p class command response len)
+    (if (string-equal response "PJLINK ERRA" :end1 len)
+        (error 'authorization-error :host host :class class :command command)
+        (error "Bad response: '~A'" (subseq response 0 len))))
+  (let ((param-len (- len 7)))
+    (when (and (= param-len 4) (string-equal response "ERR" :start1 7 :end1 10))
+      (ecase (char response 10)
+        (#\1 (error 'undefined-command-error :host host :class class :command command))
+        (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter param))
+        (#\3 (error 'unavailable-time-error :host host :class class :command command))
+        (#\4 (error 'projector-display-error :host host :class class :command command)))))
+  (values))
+
+(defun %read-pjlink-response (host stream class command param)
+  "Reads and checks a pjlink response from `stream', and returns the result."
+  (let* ((response (make-string 136))
+         (len (%read-pjlink-command-line response stream)))
+    (declare (dynamic-extent response))
+    (%check-command-response host class command param response len)
+    ;; Strip off the header and return the result.
+    (subseq response 7 (+ 7 (- len 7)))))
+
+(defun %pjlink-get (host stream digest class command param)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
  `class` as the command class
  `command` as the command name
-
+ `param` as the command parameter, if any
 
 This will issue a query such as
   %1POWR ?
@@ -293,31 +311,16 @@ This will issue a query such as
 Then given a result of
   %1POWR=0
 returns the string \"0\""
-  (%write-command stream digest class command "?" args)
-  (%with-response-buffer in
-    ;;Get the response params
-    (let* ((rlen (%read-pjlink-command-line in stream))
-           (param-len (%validate-get-result class command in rlen)))
-      (unless param-len
-        (if (string-equal in "PJLINK ERRA" :end1 rlen)
-            (error 'authorization-error :host host :class class :command command)
-            (error "Bad get response: '~A'" (subseq in 0 rlen))))
-      (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
-        (ecase (char in 10)
-          (#\1 (error 'undefined-command-error :host host :class class :command command))
-          (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter args))
-          (#\3 (error 'unavailable-time-error :host host :class class :command command))
-          (#\4 (error 'projector-display-error :host host :class class :command command))))
-      (subseq in 7 (+ 7 param-len)))))
+  (%write-command stream digest class command "?" param)
+  (%read-pjlink-response host stream class command param))
 
-(defun %pjlink-set (host stream digest class command params)
+(defun %pjlink-set (host stream digest class command param)
   "Conducts a `set` command on `stream`, and returns the result string
 uses
  `digest` as the authorization digest
  `class` as the command class
  `command` as the command name
- `params` as the string params to send
-
+ `param` as the command parameter, if any
 
 This will issue a query such as
   %1POWR 1
@@ -326,24 +329,11 @@ Then given a result of
   %1POWR=OK
 will return no values.
 Will error on error responses such as ERR1, ERRA, ERR3 etc."
-  (%write-command stream digest class command params)
-  (%with-response-buffer in
-    ;;Get the response params
-    (let* ((rlen (%read-pjlink-command-line in stream))
-           (param-len (%validate-get-result class command in rlen)))
-      (unless param-len
-        (if (string-equal in "PJLINK ERRA" :end1 rlen)
-            (error 'authorization-error :host host :class class :command command)
-            (error "Bad set response: '~A'" (subseq in 0 rlen))))
-      (when (and (= param-len 4) (string-equal in "ERR" :start1 7 :end1 10))
-        (ecase (char in 10)
-          (#\1 (error 'undefined-command-error :host host :class class :command command))
-          (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter params))
-          (#\3 (error 'unavailable-time-error :host host :class class :command command))
-          (#\4 (error 'projector-display-error :host host :class class :command command))))
-      (unless (and (= param-len 2) (string-equal in "OK" :start1 7 :end1 9))
-        (error "set '~A' failed with response '~A'" command (subseq in 7 (+ 7 param-len))))
-      (values))))
+  (%write-command stream digest class command param)
+  (let ((response (%read-pjlink-response host stream class command param)))
+    (unless (string-equal response "OK")
+      (error "set '~A' failed with response '~A'" command response)))
+  (values))
 
 (defun %read-line-and-generate-digest (stream password)
   ;;Read the initial connection line and figure out the digest to use
