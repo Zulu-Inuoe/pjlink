@@ -74,7 +74,7 @@ see `make-status-listener'"
 (defun %input2->string (input-type2 input-number2)
   (check-type input-type2 input-type2)
   (check-type input-number2 input-number2)
-  (format nil "~C~D"
+  (format nil "~C~36R"
           (ecase input-type2
             (:rgb #\1)
             (:video #\2)
