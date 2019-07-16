@@ -71,18 +71,18 @@ see `make-status-listener'"
     (#\5 :network)
     (#\6 :internal)))
 
-(defun %input2->string (input-type input-number)
-  (unless (<= 1 input-number 35)
-    (error "Invalid input number '~A'" input-number))
-  (format nil "~A~D"
-          (ecase input-type
+(defun %input2->string (input-type2 input-number2)
+  (check-type input-type2 input-type2)
+  (check-type input-number2 input-number2)
+  (format nil "~C~D"
+          (ecase input-type2
             (:rgb #\1)
             (:video #\2)
             (:digital #\3)
             (:storage #\4)
             (:network #\5)
             (:internal #\6))
-          input-number))
+          input-number2))
 
 (defun %inst-str2->input-infos (inst-str)
   "Parses a inst string into a list of `input-info`'s

@@ -87,9 +87,9 @@ see `get-error-status'"
     (#\5 :network)))
 
 (defun %input->string (input-type input-number)
-  (unless (<= 1 input-number 9)
-    (error "Invalid input number '~A'" input-number))
-  (format nil "~A~D"
+  (check-type input-type input-type)
+  (check-type input-number input-number)
+  (format nil "~C~D"
           (ecase input-type
             (:rgb #\1)
             (:video #\2)
