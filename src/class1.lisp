@@ -14,13 +14,13 @@ see `get-power-status'"
   "An input type for a projector.
 Note that a projector may have several inputs of the same type, identified by an `input-number'
 
-see `set-projector-input'"
+see `set-input'"
   '(member :rgb :video :digital :storage :network))
 
 (deftype input-number ()
   "Input number for a projector
 
-see `set-projector-input'"
+see `set-input'"
   '(integer 1 9))
 
 (deftype projector-input ()
@@ -28,9 +28,10 @@ see `set-projector-input'"
 eg.
 '(:digital . 5)
 
-see `get-projector-input2'
-see `set-projector-input2*'
-see `get-projector-inputs2'"
+see `get-input'
+see `set-input'
+see `set-input*'
+see `get-inputs'"
   'cons)
 
 (deftype av-mute-status ()

@@ -21,9 +21,9 @@ see `set-projector-input2'"
 eg.
 '(:internal . 30)
 
-see `get-projector-input2'
-see `set-projector-input2*'
-see `get-projector-inputs2'"
+see `get-input2'
+see `set-input2*'
+see `get-inputs2'"
   'cons)
 
 (deftype projector-resolution ()
