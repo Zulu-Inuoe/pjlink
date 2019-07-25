@@ -231,16 +231,14 @@ And password a sequence of characters length 32 or less."
         (%encrypt-password response password #2#))
    (error "Invalid connection response '~A'" (subseq response 0 rlen))))
 
-(defun %read-pjlink-response (host stream class command param)
-  "Reads and checks a pjlink response from `stream', and returns the result."
-  (let* ((response (make-string 136))
-         (rlen (%read-pjlink-command-line response stream)))
-    (declare (dynamic-extent response))
-    (%command-response-result host class command param response rlen)))
+(defconstant +max-connection-response-length+ 18
+  "Max length of an initial connection response.
+ This is one with authentication enabled:
+  PJLINK 1 01234567<CR>")
 
 (defun %read-line-and-generate-digest (stream password)
   "Read the initial connection line and figure out the digest to use"
-  (let ((buffer (make-string 18)))
+  (let ((buffer (make-string +max-connection-response-length+)))
     (declare (dynamic-extent buffer))
     (let ((rlen (%read-pjlink-command-line buffer stream)))
       (%verify-connection-response-and-generate-digest buffer password rlen))))
@@ -270,42 +268,9 @@ And password a sequence of characters length 32 or less."
               ,@body)
          (usocket:socket-close ,socket)))))
 
-(defun %write-command (stream digest class command &rest params)
-  "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
-eg.
-  %1CLSS ?<Return>"
-  (declare (type stream stream)
-           (type (or (string 0) (string 32)) digest)
-           (type (integer 1 2) class)
-           (type (string 4) command))
-  (let ((buf (make-string 168))
-        (len 0))
-    (declare (dynamic-extent buf))
-    (declare (type (integer 0 168) len))
-    ;;Prepend the digest (if any)
-    (replace buf digest)
-    (incf len (length digest))
-
-    ;;Add %1
-    (setf (char buf (1- (incf len))) #\%
-          (char buf (1- (incf len))) (%class->char class))
-
-    ;;Add command type
-    (replace buf command :start1 len)
-    (incf len (length command))
-
-    ;;Space
-    (setf (char buf (1- (incf len))) #\Space)
-
-    ;;Add params
-    (dolist (p params)
-      (replace buf p :start1 len)
-      (incf len (length p)))
-
-    ;;End with #\Return
-    (setf (char buf (1- (incf len))) #\Return)
-    (write-sequence buf stream :end len)
-    (finish-output stream)))
+(defconstant +max-command-line-length+ (+ 1 1 4 1 128 1)
+  "The max length of a PJLink command line:
+ Header(1)  Class(1)  Command(4)  Separator(1)  Param(128)  CR(1)")
 
 (defun %valid-command-response-p (class command response &optional (rlen (length response)))
   "Returns true if the response `response' is a valid response string, given `class' and `command'
@@ -336,6 +301,53 @@ eg.
         (#\4 (error 'projector-display-error :host host :class class :command command))))
     (subseq response header-len rlen)))
 
+(defun %read-response (host stream class command param)
+  "Reads and checks a pjlink response from `stream', and returns the result."
+  (let* ((response (make-string +max-command-line-length+))
+         (rlen (%read-pjlink-command-line response stream)))
+    (declare (dynamic-extent response))
+    (%command-response-result host class command param response rlen)))
+
+(defun %write-command (stream digest class command &rest params)
+  "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
+eg.
+  %1CLSS ?<Return>"
+  (declare (type stream stream)
+           (type (or (string 0) (string 32)) digest)
+           (type (integer 1 2) class)
+           (type (string 4) command))
+  (let ((buf (make-string +max-command-line-length+))
+        (len 0))
+    (declare (dynamic-extent buf))
+    (declare (type (integer 0 168) len))
+    ;;Prepend the digest (if any)
+    (replace buf digest)
+    (incf len (length digest))
+
+    ;;Add %1
+    (setf (char buf (1- (incf len))) #\%
+          (char buf (1- (incf len))) (%class->char class))
+
+    ;;Add command type
+    (replace buf command :start1 len)
+    (incf len (length command))
+
+    ;;Space
+    (setf (char buf (1- (incf len))) #\Space)
+
+    ;;Add params
+    (dolist (p params)
+      (let ((plen (length p)))
+        (when (> (+ plen len) (1- +max-command-line-length+))
+          (error "Parameter length too long"))
+        (replace buf p :start1 len)
+        (incf len plen)))
+
+    ;;End with #\Return
+    (setf (char buf (1- (incf len))) #\Return)
+    (write-sequence buf stream :end len)
+    (finish-output stream)))
+
 (defun %pjlink-get (host stream digest class command param)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
@@ -351,7 +363,7 @@ Then given a result of
   %1POWR=0
 returns the string \"0\""
   (%write-command stream digest class command "?" param)
-  (%read-pjlink-response host stream class command param))
+  (%read-response host stream class command param))
 
 (defun %pjlink-set (host stream digest class command param)
   "Conducts a `set` command on `stream`, and returns the result string
@@ -369,7 +381,7 @@ Then given a result of
 will return no values.
 Will error on error responses such as ERR1, ERRA, ERR3 etc."
   (%write-command stream digest class command param)
-  (let ((response (%read-pjlink-response host stream class command param)))
+  (let ((response (%read-response host stream class command param)))
     (unless (string-equal response "OK")
       (error "set '~A' failed with response '~A'" command response)))
   (values))
