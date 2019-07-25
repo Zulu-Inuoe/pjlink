@@ -111,7 +111,7 @@ eg
 
 eg
   1920x1080."
-  (let ((x-pos (position #\x res-str)))
+  (let ((x-pos (position #\x res-str :test #'char-equal)))
     (unless x-pos
       (error "Malformed resolution string: '~A'" res-str))
     (let ((horz (parse-integer res-str :end x-pos))
