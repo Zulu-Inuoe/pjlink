@@ -74,7 +74,7 @@ see `make-status-listener'"
 (defun %input2->string (input-type2 input-number2)
   (check-type input-type2 input-type2)
   (check-type input-number2 input-number2)
-  (format nil "~C~36R"
+  (format nil "~C~C"
           (ecase input-type2
             (:rgb #\1)
             (:video #\2)
@@ -82,7 +82,7 @@ see `make-status-listener'"
             (:storage #\4)
             (:network #\5)
             (:internal #\6))
-          input-number2))
+          (char "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" input-number2)))
 
 (defun %inst-str2->input-infos (inst-str)
   "Parses a inst string into a list of `input-info`'s
