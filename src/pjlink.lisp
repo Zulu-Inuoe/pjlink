@@ -182,57 +182,54 @@ nil if no password is to be used.")
              (char hex-digest (1+ hidx)) (%nibble->hex (ldb (byte 4 0) byte)))
     :finally (return hex-digest)))
 
-(defun %encrypt-password (connection-response password plen)
-  "Create a PJLink authentication digest from `connection-response' and `password'
-`connection-response' should be a sequence like
-PJLINK 1 <SEED>
+(defconstant +seed-length+ 8
+  "The number of random characters we receive from an authentication line, to be used as salt in our MD5 hash.")
+
+(defconstant +max-password-length+ 32
+  "Max number of characters in a password.")
+
+(defun %encrypt-password (seed password &optional (seed-start 0))
+  "Create a PJLink authentication digest from `seed' and `password'
+ `seed-start' indicates where reading from `seed' should start.
 And password a sequence of characters length 32 or less."
-  (let ((buffer (make-string 40)))
-    (declare (dynamic-extent buffer))
-    (replace buffer connection-response :start2 9 :end2 17)
-    (replace buffer password :start1 8 :end2 plen)
-    (%md5->hex-str (md5:md5sum-string buffer :end (+ 8 plen)))))
+  (let ((seed-end (+ seed-start +seed-length+))
+        (plen (length password)))
+    (unless (<= seed-end (length seed))
+      (error "Seed length too short (~D). Should be at least ~D." (length seed) +seed-length+))
+    (unless (<= plen +max-password-length+)
+      (error "Password length too long (~D). Max password length is ~D" plen +max-password-length+))
+    (let ((buffer (make-string (+ +seed-length+ plen))))
+      (declare (dynamic-extent buffer))
+      (replace buffer seed :start2 seed-start :end2 seed-end)
+      (replace buffer password :start1 +seed-length+ :end2 plen)
+      (%md5->hex-str (md5:md5sum-string buffer :end (+ +seed-length+ plen))))))
 
-(defun %verify-connect-response (response rlen)
-  "Verifies the initial connection response.
-Returns nil if the response does not match a proper pjlink connection response."
-  (and (>= rlen 8)
-       (string-equal response "PJLINK " :end1 7)
-       (or
-        ;; Authentication disabled
-        (and (char= (char response 7) #\0))
-        ;; Authentication enabled. Expect seed
-        (and (char= (char response 7) #\1)
-             (char= (char response 8) #\Space)
-             (= rlen 17)))))
-
-(defun %create-digest (connection-response password)
-  "Creates a digest string from a connection response and a password.
-Empty string on a non-authenticated response.
-Otherwise calculates the response by prepending the seed from the connection response to the password.
-
-`connection-response` should be a string containing a PJLink connection response
-`password` should be a password designator"
-  ;;Check whether authentication is enabled or not
-  (ecase (char connection-response 7)
-    (#\0 "") ; No authentication. Empty digest
-    (#\1
-     (let ((plen (length password)))
-       (unless (<= plen 32)
-         (error "Password length too long (~D)" plen))
-       ;;Authentication
-       (%encrypt-password connection-response password plen)))))
+(defun %verify-connection-response-and-generate-digest (response password &optional (rlen (length response)))
+  "Verifies that `response' is a valid connection response, and generates a digest from it and `password'
+ `rlen' is the number of characters in `response' we should read."
+  (or
+   ;; Authentication disabled
+   (and (string-equal response "PJLINK 0" :end1 rlen)
+        ;; Empty digest
+        "")
+   ;; Authentication enabled.
+   ;; Eg "PJLINK 1 12345678"
+   (and (= rlen #.(+ #2=#.(length #1="PJLINK 1 ") +seed-length+))
+        (string-equal response #1# :end1 #2#)
+        ;; Create digest
+        (%encrypt-password response password #2#))
+   (error "Invalid connection response '~A'" (subseq response 0 rlen))))
 
 (defun %read-pjlink-command-line (buffer stream)
-  "Reads a pjlink command-line (delimited by #\Return) from `stream` into `buffer`"
+  "Reads a pjlink command-line (delimited by #\Return) from `stream` into `buffer`
+ Returns the number of characters read, before encountering #\Return"
   (loop
     :for b := (read-char stream)
     :for i :from 0 :below (length buffer)
     ;; #\Return not included
     :until (char= b #\Return)
     :do (setf (char buffer i) b)
-    :finally
-       (return i)))
+    :finally (return i)))
 
 (defun %write-command (stream digest class command &rest params)
   "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
@@ -341,13 +338,11 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
   (values))
 
 (defun %read-line-and-generate-digest (stream password)
-  ;;Read the initial connection line and figure out the digest to use
+  "Read the initial connection line and figure out the digest to use"
   (let ((buffer (make-string 18)))
     (declare (dynamic-extent buffer))
     (let ((rlen (%read-pjlink-command-line buffer stream)))
-      (unless (%verify-connect-response buffer rlen)
-        (error "Invalid response '~A'" (subseq buffer 0 rlen)))
-      (%create-digest buffer password))))
+      (%verify-connection-response-and-generate-digest buffer password rlen))))
 
 (defmacro %with-pjlink-connection ((stream-var digest-var)
                                    (host
