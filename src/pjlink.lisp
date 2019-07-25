@@ -375,6 +375,16 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
   (values))
 
 (defmacro %defpjlink-get (name (class command) (&whole input-transform &optional input-args &body transform-body) (result-var) &body body)
+  "Helper macro to create a GET function.
+ `name' is the name of the resulting function
+ `class' indicates the class number for the command - eg 1
+ `command' is the string designating the command - eg \"POWR\"
+ `input-args' and `transform-body' are used to receive input arguments and transform them into string PJLink parameters
+  eg. ((input-type input-number)
+        (%input2->string input-type input-number))
+  arguments defined in `input-args' always preceed the host and key args
+ `result-var' is the variable holding the result of the get
+ `body' is the body of the function, which processes the result."
   (with-gensyms (args stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
@@ -396,6 +406,12 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
            ,@body)))))
 
 (defmacro %defpjlink-set (name (class command) args &body body)
+    "Helper macro to create a SET function.
+ `name' is the name of the resulting function
+ `class' indicates the class number for the command - eg 1
+ `command' is the string designating the command - eg \"POWR\"
+ `args' is a list of additional arguments to the function. These always preceed the host and key arguments.
+ `body' is the body of the function, which generates the string pjlink parameter to send."
   (with-gensyms (stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
