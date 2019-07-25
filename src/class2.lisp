@@ -297,7 +297,7 @@ When `local-host' is nil, the general broadcast address is used"
         (values (ip-interfaces:ip-interface-address interface) (%calculate-broadcast-addr* interface))
         (values nil #(255 255 255 255)))))
 
-(defun search-projectors (&key local-host (port +pjlink-port+))
+(defun search-projectors (&key local-host (port +default-port+))
   "Performs a PJLink broadcast search.
 Returns a list of `(`hostname' . `mac-address')` pairs representing each projector that responded.
 
@@ -355,7 +355,7 @@ use the general broadcast address instead.
     :type cons
     :initform (cons nil nil))))
 
-(defun make-status-listener (&key handlers local-host (port +pjlink-port+))
+(defun make-status-listener (&key handlers local-host (port +default-port+))
   "Creates a projector status listener listening on `local-host'.
 `handlers' is either a `status-handler' handler or a list of `status-handler's
   these handlers will be initially registered as `add-handler'

@@ -3,6 +3,9 @@
 (defpackage #:pjlink
   (:use #:alexandria #:cl)
   (:export
+   #:+default-port+
+   #:+max-password-length+
+
    #:hostname
 
    ;; host-info

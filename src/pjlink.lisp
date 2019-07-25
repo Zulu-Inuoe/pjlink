@@ -27,8 +27,11 @@
 ;;;  `%1POWR=OK
 ;;;
 
-(defconstant +pjlink-port+ 4352
+(defconstant +default-port+ 4352
   "Default PJLink port.")
+
+(defconstant +max-password-length+ 32
+  "Max number of characters in a pjlink password.")
 
 (deftype hostname ()
   "A valid hostname for a projector or local inteface."
@@ -51,7 +54,7 @@
   (:method (obj)
     "Use the default pjlink port."
     (declare (ignore obj))
-    +pjlink-port+))
+    +default-port+))
 
 (defgeneric password (obj)
   (:documentation "Get the password designated by `obj'.
@@ -84,7 +87,7 @@ nil if no password is to be used.")
    (%port
     :type integer
     :initarg :port
-    :initform +pjlink-port+
+    :initform +default-port+
     :accessor port)
    (%password
     :type (or null sequence)
@@ -184,9 +187,6 @@ nil if no password is to be used.")
 
 (defconstant +seed-length+ 8
   "The number of random characters we receive from an authentication line, to be used as salt in our MD5 hash.")
-
-(defconstant +max-password-length+ 32
-  "Max number of characters in a password.")
 
 (defun %encrypt-password (seed password &optional (seed-start 0))
   "Create a PJLink authentication digest from `seed' and `password'
@@ -352,7 +352,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
 (defmacro %with-pjlink-connection ((stream-var digest-var)
                                    (host
                                     &key
-                                      (port +pjlink-port+)
+                                      (port +default-port+)
                                       (password nil)
                                       (local-host nil)
                                       (local-port nil))
