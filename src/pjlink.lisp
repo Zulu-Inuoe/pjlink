@@ -171,11 +171,11 @@ nil if no password is to be used.")
     :with hex-digest := (make-string 32)
     :for nidx :from 0 :below 16
     :for hidx :from 0 :below 32 :by 2
+    :for byte := (aref md5 nidx)
     :do
-       (setf (char hex-digest hidx) (%nibble->hex (ash (logand #xF0 (aref md5 nidx)) -4))
-             (char hex-digest (1+ hidx)) (%nibble->hex (logand #x0F (aref md5 nidx))))
-    :finally
-       (return hex-digest)))
+       (setf (char hex-digest hidx) (%nibble->hex (ldb (byte 4 4) byte))
+             (char hex-digest (1+ hidx)) (%nibble->hex (ldb (byte 4 0) byte)))
+    :finally (return hex-digest)))
 
 (defun %encrypt-password (connection-response password plen)
   "Create a PJLink authentication digest from `connection-response' and `password'
