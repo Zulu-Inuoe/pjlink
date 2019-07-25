@@ -165,6 +165,11 @@ nil if no password is to be used.")
   (check-type nibble (unsigned-byte 4))
   (char "0123456789abcdef" nibble))
 
+(defun %class->char (class)
+  "Convert a class number to its character representation."
+  (check-type class (integer 1 9))
+  (char "0123456789" class))
+
 (defun %md5->hex-str (md5)
   "Convert a 16-octet md5 hash into a 32-char hex-encoded string."
   (loop
@@ -247,7 +252,7 @@ eg.
 
     ;;Add %1
     (setf (char buf (1- (incf len))) #\%
-          (char buf (1- (incf len))) (code-char (+ (char-code #\0) class)))
+          (char buf (1- (incf len))) (%class->char class))
 
     ;;Add command type
     (replace buf command :start1 len)
@@ -269,7 +274,7 @@ eg.
 (defun %valid-command-response-p (class command response len)
   (and (>= len 7)
        (char= (char response 0) #\%)
-       (char= (char response 1) (code-char (+ (char-code #\0) class)))
+       (char= (char response 1) (%class->char class))
        (string-equal response command :start1 2 :end1 6)
        (char= (char response 6) #\=)))
 
