@@ -173,6 +173,17 @@ nil if no password is to be used.")
   (check-type class (integer 1 9))
   (char "0123456789" class))
 
+(defun %read-pjlink-command-line (buffer stream)
+  "Reads a pjlink command-line (delimited by #\Return) from `stream` into `buffer`
+ Returns the number of characters read, before encountering #\Return"
+  (loop
+    :for b := (read-char stream)
+    :for i :from 0 :below (length buffer)
+    ;; #\Return not included
+    :until (char= b #\Return)
+    :do (setf (char buffer i) b)
+    :finally (return i)))
+
 (defun %md5->hex-str (md5)
   "Convert a 16-octet md5 hash into a 32-char hex-encoded string."
   (loop
@@ -220,16 +231,44 @@ And password a sequence of characters length 32 or less."
         (%encrypt-password response password #2#))
    (error "Invalid connection response '~A'" (subseq response 0 rlen))))
 
-(defun %read-pjlink-command-line (buffer stream)
-  "Reads a pjlink command-line (delimited by #\Return) from `stream` into `buffer`
- Returns the number of characters read, before encountering #\Return"
-  (loop
-    :for b := (read-char stream)
-    :for i :from 0 :below (length buffer)
-    ;; #\Return not included
-    :until (char= b #\Return)
-    :do (setf (char buffer i) b)
-    :finally (return i)))
+(defun %read-pjlink-response (host stream class command param)
+  "Reads and checks a pjlink response from `stream', and returns the result."
+  (let* ((response (make-string 136))
+         (rlen (%read-pjlink-command-line response stream)))
+    (declare (dynamic-extent response))
+    (%command-response-result host class command param response rlen)))
+
+(defun %read-line-and-generate-digest (stream password)
+  "Read the initial connection line and figure out the digest to use"
+  (let ((buffer (make-string 18)))
+    (declare (dynamic-extent buffer))
+    (let ((rlen (%read-pjlink-command-line buffer stream)))
+      (%verify-connection-response-and-generate-digest buffer password rlen))))
+
+(defmacro %with-pjlink-connection ((stream-var digest-var)
+                                   (host
+                                    &key
+                                      (port +default-port+)
+                                      (password nil)
+                                      (local-host nil)
+                                      (local-port nil))
+                                   &body body)
+  (with-gensyms (host-sym port-sym password-sym local-host-sym local-port-sym
+                          socket)
+    `(let* ((,host-sym ,host)
+            (,port-sym ,port)
+            (,password-sym ,password)
+            (,local-host-sym ,local-host)
+            (,local-port-sym ,local-port)
+            (,socket (usocket:socket-connect ,host-sym ,port-sym
+                                             :element-type 'character
+                                             :local-host ,local-host-sym
+                                             :local-port ,local-port-sym)))
+       (unwind-protect
+            (let* ((,stream-var (usocket:socket-stream ,socket))
+                   (,digest-var (%read-line-and-generate-digest ,stream-var ,password-sym)))
+              ,@body)
+         (usocket:socket-close ,socket)))))
 
 (defun %write-command (stream digest class command &rest params)
   "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
@@ -297,13 +336,6 @@ eg.
         (#\4 (error 'projector-display-error :host host :class class :command command))))
     (subseq response header-len rlen)))
 
-(defun %read-pjlink-response (host stream class command param)
-  "Reads and checks a pjlink response from `stream', and returns the result."
-  (let* ((response (make-string 136))
-         (rlen (%read-pjlink-command-line response stream)))
-    (declare (dynamic-extent response))
-    (%command-response-result host class command param response rlen)))
-
 (defun %pjlink-get (host stream digest class command param)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
@@ -341,38 +373,6 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
     (unless (string-equal response "OK")
       (error "set '~A' failed with response '~A'" command response)))
   (values))
-
-(defun %read-line-and-generate-digest (stream password)
-  "Read the initial connection line and figure out the digest to use"
-  (let ((buffer (make-string 18)))
-    (declare (dynamic-extent buffer))
-    (let ((rlen (%read-pjlink-command-line buffer stream)))
-      (%verify-connection-response-and-generate-digest buffer password rlen))))
-
-(defmacro %with-pjlink-connection ((stream-var digest-var)
-                                   (host
-                                    &key
-                                      (port +default-port+)
-                                      (password nil)
-                                      (local-host nil)
-                                      (local-port nil))
-                                   &body body)
-  (with-gensyms (host-sym port-sym password-sym local-host-sym local-port-sym
-                          socket)
-    `(let* ((,host-sym ,host)
-            (,port-sym ,port)
-            (,password-sym ,password)
-            (,local-host-sym ,local-host)
-            (,local-port-sym ,local-port)
-            (,socket (usocket:socket-connect ,host-sym ,port-sym
-                                             :element-type 'character
-                                             :local-host ,local-host-sym
-                                             :local-port ,local-port-sym)))
-       (unwind-protect
-            (let* ((,stream-var (usocket:socket-stream ,socket))
-                   (,digest-var (%read-line-and-generate-digest ,stream-var ,password-sym)))
-              ,@body)
-         (usocket:socket-close ,socket)))))
 
 (defmacro %defpjlink-get (name (class command) (&whole input-transform &optional input-args &body transform-body) (result-var) &body body)
   (with-gensyms (args stream digest)
