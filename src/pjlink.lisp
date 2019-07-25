@@ -283,7 +283,8 @@ And password a sequence of characters length 32 or less."
        (char= (char response 6) #\=)))
 
 (defun %command-response-result (host class command param response &optional (rlen (length response)))
-  "Verifies the response and signals errors if necessary"
+  "Verifies the response and signals errors if necessary.
+ Returns the 'parameter' part of the `response' as a fresh string."
   (when (string-equal response "PJLINK ERRA" :end1 rlen)
     (error 'authorization-error :host host :class class :command command))
   (unless (%valid-command-response-p class command response rlen)
@@ -351,10 +352,10 @@ eg.
 (defun %pjlink-get (host stream digest class command param)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
- `digest` as the authorization digest
- `class` as the command class
- `command` as the command name
- `param` as the command parameter, if any
+ `digest' as the authorization digest
+ `class' as the command class
+ `command' as the command name
+ `param' as the command parameter, if any
 
 This will issue a query such as
   %1POWR ?
@@ -368,10 +369,10 @@ returns the string \"0\""
 (defun %pjlink-set (host stream digest class command param)
   "Conducts a `set` command on `stream`, and returns the result string
 uses
- `digest` as the authorization digest
- `class` as the command class
- `command` as the command name
- `param` as the command parameter, if any
+ `digest' as the authorization digest
+ `class' as the command class
+ `command' as the command name
+ `param' as the command parameter, if any
 
 This will issue a query such as
   %1POWR 1
