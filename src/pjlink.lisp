@@ -268,36 +268,41 @@ eg.
     (write-sequence buf stream :end len)
     (finish-output stream)))
 
-(defun %valid-command-response-p (class command response len)
-  (and (>= len 7)
+(defun %valid-command-response-p (class command response &optional (rlen (length response)))
+  "Returns true if the response `response' is a valid response string, given `class' and `command'
+ Given `class' = 1, and `command' = \"POWR\", a valid response would be
+  %1POWR="
+  (and (>= rlen 7)
        (char= (char response 0) #\%)
        (char= (char response 1) (%class->char class))
        (string-equal response command :start1 2 :end1 6)
        (char= (char response 6) #\=)))
 
-(defun %check-command-response (host class command param response len)
+(defun %command-response-result (host class command param response &optional (rlen (length response)))
   "Verifies the response and signals errors if necessary"
-  (unless (%valid-command-response-p class command response len)
-    (if (string-equal response "PJLINK ERRA" :end1 len)
-        (error 'authorization-error :host host :class class :command command)
-        (error "Bad response: '~A'" (subseq response 0 len))))
-  (let ((param-len (- len 7)))
-    (when (and (= param-len 4) (string-equal response "ERR" :start1 7 :end1 10))
-      (ecase (char response 10)
+  (when (string-equal response "PJLINK ERRA" :end1 rlen)
+    (error 'authorization-error :host host :class class :command command))
+  (unless (%valid-command-response-p class command response rlen)
+    (error "Bad response: '~A'" (subseq response 0 rlen)))
+  (let* ((header-len #.(length "%1XXXX="))
+         (err-len #.(length "ERR"))
+         (param-len (- rlen header-len)))
+    ;; If the response is an error string
+    (when (and (= param-len #.(length "ERRX"))
+               (string-equal response "ERR" :start1 header-len :end1 (+ header-len err-len)))
+      (case (char response (+ header-len err-len))
         (#\1 (error 'undefined-command-error :host host :class class :command command))
         (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter param))
         (#\3 (error 'unavailable-time-error :host host :class class :command command))
-        (#\4 (error 'projector-display-error :host host :class class :command command)))))
-  (values))
+        (#\4 (error 'projector-display-error :host host :class class :command command))))
+    (subseq response header-len rlen)))
 
 (defun %read-pjlink-response (host stream class command param)
   "Reads and checks a pjlink response from `stream', and returns the result."
   (let* ((response (make-string 136))
-         (len (%read-pjlink-command-line response stream)))
+         (rlen (%read-pjlink-command-line response stream)))
     (declare (dynamic-extent response))
-    (%check-command-response host class command param response len)
-    ;; Strip off the header and return the result.
-    (subseq response 7 (+ 7 (- len 7)))))
+    (%command-response-result host class command param response rlen)))
 
 (defun %pjlink-get (host stream digest class command param)
   "Conducts a `get` command on `stream`, and returns the result string
