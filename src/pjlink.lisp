@@ -2,36 +2,11 @@
 
 (in-package #:pjlink)
 
-;;;
-;;; The structure of a PJLink command:
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;  | Header+Class |   Body  |   Separator   |        Param       |    Terminator  |
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;  |    2 bytes   | 4 bytes | 1 byte (0x20) | 128 bytes or less  |  1 byte (0x0D) |
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;
-;;; Example command (in ASCII)
-;;;  `%1POWR 1
-;;;
-
-;;;
-;;; The structure of a PJLink response:
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;  | Header+Class |   Body  |   Separator   |        Param       |    Terminator  |
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;  |    2 bytes   | 4 bytes | 1 byte (0x3D) | 128 bytes or less  |  1 byte (0x0D) |
-;;;  +--------------+---------+---------------+--------------------+----------------+
-;;;
-;;; Example response (in ASCII)
-;;;
-;;;  `%1POWR=OK
-;;;
-
 (defconstant +default-port+ 4352
   "Default PJLink port.")
 
 (defconstant +max-password-length+ 32
-  "Max number of characters in a pjlink password.")
+  "Max number of characters in a PJLink password.")
 
 (deftype hostname ()
   "A valid hostname for a projector or local inteface."
@@ -52,7 +27,7 @@
 (defgeneric port (obj)
   (:documentation "Get the port designated by `obj'")
   (:method (obj)
-    "Use the default pjlink port."
+    "Use the default PJLink port."
     (declare (ignore obj))
     +default-port+))
 
@@ -191,9 +166,8 @@ nil if no password is to be used.")
     :for nidx :from 0 :below 16
     :for hidx :from 0 :below 32 :by 2
     :for byte := (aref md5 nidx)
-    :do
-       (setf (char hex-digest hidx) (%nibble->hex (ldb (byte 4 4) byte))
-             (char hex-digest (1+ hidx)) (%nibble->hex (ldb (byte 4 0) byte)))
+    :do (setf (char hex-digest (+ hidx 0)) (%nibble->hex (ldb (byte 4 4) byte))
+              (char hex-digest (+ hidx 1)) (%nibble->hex (ldb (byte 4 0) byte)))
     :finally (return hex-digest)))
 
 (defconstant +seed-length+ 8
@@ -206,9 +180,9 @@ And password a sequence of characters length 32 or less."
   (let ((seed-end (+ seed-start +seed-length+))
         (plen (length password)))
     (unless (<= seed-end (length seed))
-      (error "Seed length too short (~D). Should be at least ~D." (length seed) +seed-length+))
+      (error "Seed buffer too short (~D). Should be at least ~D." (length seed) +seed-length+))
     (unless (<= plen +max-password-length+)
-      (error "Password length too long (~D). Max password length is ~D" plen +max-password-length+))
+      (error "Password length too long (~D). Max password length is ~D." plen +max-password-length+))
     (let ((buffer (make-string (+ +seed-length+ plen))))
       (declare (dynamic-extent buffer))
       (replace buffer seed :start2 seed-start :end2 seed-end)
@@ -272,6 +246,19 @@ And password a sequence of characters length 32 or less."
   "The max length of a PJLink command line:
  Header(1)  Class(1)  Command(4)  Separator(1)  Param(128)  CR(1)")
 
+;;;
+;;; The structure of a PJLink response:
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;  | Header+Class |   Body  |   Separator   |        Param       |    Terminator  |
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;  |    2 bytes   | 4 bytes | 1 byte (0x3D) | 128 bytes or less  |  1 byte (0x0D) |
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;
+;;; Example response (in ASCII)
+;;;
+;;;  `%1POWR=OK
+;;;
+
 (defun %valid-command-response-p (class command response &optional (rlen (length response)))
   "Returns true if the response `response' is a valid response string, given `class' and `command'
  Given `class' = 1, and `command' = \"POWR\", a valid response would be
@@ -303,14 +290,27 @@ And password a sequence of characters length 32 or less."
     (subseq response header-len rlen)))
 
 (defun %read-response (host stream class command param)
-  "Reads and checks a pjlink response from `stream', and returns the result."
+  "Reads and checks a PJLink response from `stream', and returns the result."
   (let* ((response (make-string +max-command-line-length+))
          (rlen (%read-pjlink-command-line response stream)))
     (declare (dynamic-extent response))
     (%command-response-result host class command param response rlen)))
 
+;;;
+;;; The structure of a PJLink command:
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;  | Header+Class |   Body  |   Separator   |        Param       |    Terminator  |
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;  |    2 bytes   | 4 bytes | 1 byte (0x20) | 128 bytes or less  |  1 byte (0x0D) |
+;;;  +--------------+---------+---------------+--------------------+----------------+
+;;;
+;;; Example command (in ASCII)
+;;;  `%1POWR 1
+;;;
+
+
 (defun %write-command (stream digest class command &rest params)
-  "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
+  "Writes a PJLink command to `stream' using `digest', `class', `command', and `params'
  eg.
   %1CLSS ?<Return>"
   (declare (dynamic-extent params))
@@ -429,7 +429,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
  `class' indicates the class number for the command - eg 1
  `command' is the string designating the command - eg \"POWR\"
  `args' is a list of additional arguments to the function. These always preceed the host and key arguments.
- `body' is the body of the function, which generates the string pjlink parameter to send."
+ `body' is the body of the function, which generates the string PJLink parameter to send."
   (with-gensyms (stream digest)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
