@@ -311,30 +311,33 @@ And password a sequence of characters length 32 or less."
 
 (defun %write-command (stream digest class command &rest params)
   "Writes a pjlink command to `stream' using `digest', `class', `command', and `params'
-eg.
+ eg.
   %1CLSS ?<Return>"
-  (declare (type stream stream)
-           (type (or (string 0) (string 32)) digest)
-           (type (integer 1 2) class)
-           (type (string 4) command))
+  (declare (dynamic-extent params))
+  (check-type digest (or (string 0) (string 32)))
+  (check-type command (string 4))
   (let ((buf (make-string +max-command-line-length+))
         (len 0))
     (declare (dynamic-extent buf))
-    (declare (type (integer 0 168) len))
     ;;Prepend the digest (if any)
     (replace buf digest)
     (incf len (length digest))
 
-    ;;Add %1
-    (setf (char buf (1- (incf len))) #\%
-          (char buf (1- (incf len))) (%class->char class))
+    ;;Add %
+    (setf (char buf len) #\%)
+    (incf len)
+
+    ;; Add class
+    (setf (char buf len) (%class->char class))
+    (incf len)
 
     ;;Add command type
     (replace buf command :start1 len)
     (incf len (length command))
 
     ;;Space
-    (setf (char buf (1- (incf len))) #\Space)
+    (setf (char buf len) #\Space)
+    (incf len)
 
     ;;Add params
     (dolist (p params)
@@ -345,7 +348,9 @@ eg.
         (incf len plen)))
 
     ;;End with #\Return
-    (setf (char buf (1- (incf len))) #\Return)
+    (setf (char buf len) #\Return)
+    (incf len)
+
     (write-sequence buf stream :end len)
     (finish-output stream)))
 
