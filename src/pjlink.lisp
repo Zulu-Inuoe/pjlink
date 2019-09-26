@@ -138,6 +138,14 @@ nil if no password is to be used.")
                      (projector-command-error-class c)
                      (projector-command-error-command c)))))
 
+(declaim (inline %chars->string))
+(defun %chars->string (&rest characters)
+  (declare (dynamic-extent characters))
+  (coerce characters 'string))
+
+(define-compiler-macro %chars->string (&rest characters)
+  `(coerce (list ,@characters) 'string))
+
 (defun %nibble->hex (nibble)
   "Convert a nibble into its hex char."
   (check-type nibble (unsigned-byte 4))

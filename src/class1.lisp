@@ -89,14 +89,14 @@ see `get-error-status'"
 (defun %input->string (input-type input-number)
   (check-type input-type input-type)
   (check-type input-number input-number)
-  (format nil "~C~C"
-          (ecase input-type
-            (:rgb #\1)
-            (:video #\2)
-            (:digital #\3)
-            (:storage #\4)
-            (:network #\5))
-          (char "0123456789" input-number)))
+  (%chars->string
+   (ecase input-type
+     (:rgb #\1)
+     (:video #\2)
+     (:digital #\3)
+     (:storage #\4)
+     (:network #\5))
+   (char "0123456789" input-number)))
 
 (defun %avmt->sym (response)
   (eswitch (response :test #'string-equal)
