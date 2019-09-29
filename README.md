@@ -47,7 +47,7 @@ Code examples have `*ip*` bound to the IP of the projector, eg `"192.168.1.2"`
 :STANDBY
 
 ;; Turn projector on
-(pjlink:turn-on *ip*)
+(pjlink:power-on *ip*)
 
 (pjlink:get-power-status *ip*)
 ;; =>
