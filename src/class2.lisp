@@ -24,7 +24,7 @@ eg.
 see `get-input2'
 see `set-input2*'
 see `get-inputs2'"
-  'cons)
+  '(cons input-type2 input-number2))
 
 (deftype projector-resolution ()
   "Resolution of a projector, as:
@@ -34,7 +34,7 @@ see `get-inputs2'"
 
 see `get-resolution'
 see `get-recommended-resolution'"
-  '(or cons (member :no-signal :unknown-signal)))
+  '(or (cons integer integer) (member :no-signal :unknown-signal)))
 
 (deftype mac-address ()
   "A MAC address as a vector of 6 octets.

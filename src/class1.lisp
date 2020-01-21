@@ -32,7 +32,7 @@ see `get-input'
 see `set-input'
 see `set-input*'
 see `get-inputs'"
-  'cons)
+  '(cons input-type input-number))
 
 (deftype av-mute-status ()
   "Status of the audio-video mute setting on a projector.
