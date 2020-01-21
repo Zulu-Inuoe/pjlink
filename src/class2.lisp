@@ -343,11 +343,11 @@ use the general broadcast address instead.
    (%address
     :type hostname
     :initarg :address
-    :initform (error "Must specify address"))
+    :initform (required-argument :address))
    (%port
     :type integer
     :initarg :port
-    :initform (error "Must specify port"))
+    :initform (required-argument :port))
    (%handlers-ptr
     :type cons
     :initform (cons nil nil))
