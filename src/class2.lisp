@@ -319,7 +319,7 @@ use the general broadcast address instead.
       (let ((buf (make-string 40)))
         (declare (dynamic-extent buf))
         (loop
-          :for remaining-time := 30
+          :with remaining-time := 30
           :if (multiple-value-bind (ready time-left)
                   (usocket:wait-for-input socket :timeout remaining-time :ready-only t)
                 (when (and (not ready) (null time-left))
