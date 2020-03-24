@@ -220,7 +220,7 @@ nil if no replacement model numbers are available."
   "1")
 
 (%defpjlink-set unfreeze-screen (2 "FREZ") ()
-  "Freeze the screen."
+  "Unfreeze the screen."
   "0")
 
 (%defpjlink-get get-freeze-status (2 "FREZ") nil (result)
