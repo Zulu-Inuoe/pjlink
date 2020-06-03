@@ -220,10 +220,10 @@ And password a sequence of characters length 32 or less."
 
 (defun %read-line-and-generate-digest (stream password)
   "Read the initial connection line and figure out the digest to use"
-  (let ((buffer (make-string +max-connection-response-length+)))
+  (let* ((buffer (make-string +max-connection-response-length+))
+         (rlen (%read-pjlink-command-line buffer stream)))
     (declare (dynamic-extent buffer))
-    (let ((rlen (%read-pjlink-command-line buffer stream)))
-      (%verify-connection-response-and-generate-digest buffer password rlen))))
+    (%verify-connection-response-and-generate-digest buffer password rlen)))
 
 (defmacro %with-pjlink-connection ((stream-var digest-var)
                                    (host
