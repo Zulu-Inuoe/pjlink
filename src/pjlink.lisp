@@ -277,32 +277,27 @@ And password a sequence of characters length 32 or less."
        (string-equal response command :start1 2 :end1 6)
        (char= (char response 6) #\=)))
 
-(defun %command-response-result (host class command param response &optional (rlen (length response)))
-  "Verifies the response and signals errors if necessary.
- Returns the 'parameter' part of the `response' as a fresh string."
-  (when (string-equal response "PJLINK ERRA" :end1 rlen)
-    (error 'authorization-error :host host :class class :command command))
-  (unless (%valid-command-response-p class command response rlen)
-    (error "Bad response: '~A'" (subseq response 0 rlen)))
-  (let* ((header-len #.(length "%1XXXX="))
-         (err-len #.(length "ERR"))
-         (param-len (- rlen header-len)))
-    ;; If the response is an error string
-    (when (and (= param-len #.(length "ERRX"))
-               (string-equal response "ERR" :start1 header-len :end1 (+ header-len err-len)))
-      (case (char response (+ header-len err-len))
-        (#\1 (error 'undefined-command-error :host host :class class :command command))
-        (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter param))
-        (#\3 (error 'unavailable-time-error :host host :class class :command command))
-        (#\4 (error 'projector-display-error :host host :class class :command command))))
-    (subseq response header-len rlen)))
-
 (defun %read-response (host stream class command param)
   "Reads and checks a PJLink response from `stream', and returns the result."
   (let* ((response (make-string +max-command-line-length+))
          (rlen (%read-pjlink-command-line response stream)))
     (declare (dynamic-extent response))
-    (%command-response-result host class command param response rlen)))
+    (when (string-equal response "PJLINK ERRA" :end1 rlen)
+      (error 'authorization-error :host host :class class :command command))
+    (unless (%valid-command-response-p class command response rlen)
+      (error "Bad response: '~A'" (subseq response 0 rlen)))
+    (let* ((header-len #.(length "%1XXXX="))
+           (err-len #.(length "ERR"))
+           (param-len (- rlen header-len)))
+      ;; If the response is an error string
+      (when (and (= param-len #.(length "ERRX"))
+                 (string-equal response "ERR" :start1 header-len :end1 (+ header-len err-len)))
+        (case (char response (+ header-len err-len))
+          (#\1 (error 'undefined-command-error :host host :class class :command command))
+          (#\2 (error 'out-of-parameter-error :host host :class class :command command :parameter param))
+          (#\3 (error 'unavailable-time-error :host host :class class :command command))
+          (#\4 (error 'projector-display-error :host host :class class :command command))))
+      (subseq response header-len rlen))))
 
 ;;;
 ;;; The structure of a PJLink command:
