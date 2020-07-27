@@ -26,6 +26,22 @@ see `set-input2*'
 see `get-inputs2'"
   '(cons input-type2 input-number2))
 
+(defun projector-input2 (input-type2 input-number2)
+  "Create a `projector-input2' from `input-type2' and `input-number2'"
+  (check-type input-type2 input-type2)
+  (check-type input-number2 input-number2)
+  (cons input-type2 input-number2))
+
+(defun input-type2 (projector-input2)
+  "Get the `input-type2' part of `projector-input2'"
+  (check-type projector-input2 projector-input2)
+  (car projector-input2))
+
+(defun input-number2 (projector-input2)
+  "Get the `input-number2' part of `projector-input2'"
+  (check-type projector-input2 projector-input2)
+  (cdr projector-input2))
+
 (deftype projector-resolution ()
   "Resolution of a projector, as:
   a cons of (<horz-resolution> . <vert-resolution>)
@@ -84,8 +100,8 @@ see `make-status-listener'"
      (:internal #\6))
    (char "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" input-number2)))
 
-(defun %inst-str2->input-infos (inst-str)
-  "Parses a inst string into a list of `input-info`'s
+(defun %inst-str2->projector-input2s (inst-str)
+  "Parses a inst string into a list of `projector-input2''s
 `inst-str` should be a string where each input is represented by
 
   <Type><Number>
@@ -102,7 +118,7 @@ eg
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input2->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 36)
-    :collecting (cons type number)))
+    :collecting (projector-input2 type number)))
 
 (defun %res-str->resolution (res-str)
   "Parses a resolution string of the form
@@ -126,9 +142,9 @@ see `set-input2*'
 see `get-input2'"
   (%input2->string input-type input-number))
 
-(%defpjlink-set set-input2* (2 "INPT") (input-info)
+(%defpjlink-set set-input2* (2 "INPT") (projector-input2)
   "As `set-input2' but using a `projector-input' or `projector-input2' object instead."
-  (%input2->string (car input-info) (cdr input-info)))
+  (%input2->string (input-type2 projector-input2) (input-number2 projector-input2)))
 
 (%defpjlink-get get-input2 (2 "INPT") nil (result)
   (cons
@@ -137,7 +153,7 @@ see `get-input2'"
 
 (%defpjlink-get get-inputs2 (2 "INST") nil (result)
   "Query the available `projector-input2's on the projector as a list."
-  (%inst-str2->input-infos result))
+  (%inst-str2->projector-input2s result))
 
 (%defpjlink-get get-serial-number (2 "SNUM") nil (result)
   "Get the serial number of the projector.
@@ -161,8 +177,8 @@ nil if not available."
     result))
 
 (%defpjlink-get get-input-name* (2 "INNM")
-    ((input-info)
-      (%input2->string (car input-info) (cdr input-info)))
+    ((projector-input2)
+      (%input2->string (input-type2 projector-input2) (input-number2 projector-input2)))
   (result)
   "As `get-input-name' but using a `projector-input' or `projector-input2' object instead.
 nil if not available."

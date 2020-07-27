@@ -38,6 +38,9 @@
    #:input-type
    #:input-number
    #:projector-input
+   #:lamp-status
+   #:lamp-hours
+   #:lamp-on-p
    #:av-mute-status
    #:error-component
    #:error-status

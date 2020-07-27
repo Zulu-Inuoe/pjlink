@@ -34,6 +34,49 @@ see `set-input*'
 see `get-inputs'"
   '(cons input-type input-number))
 
+(defun projector-input (input-type input-number)
+  "Create a `projector-input' from `input-type' and `input-number'"
+  (check-type input-type input-type)
+  (check-type input-number input-number)
+  (cons input-type input-number))
+
+(defun input-type (projector-input)
+  "Get the `input-type' part of `projector-input'"
+  (check-type projector-input projector-input)
+  (car projector-input))
+
+(defun input-number (projector-input)
+  "Get the `input-number' part of `projector-input'"
+  (check-type projector-input projector-input)
+  (cdr projector-input))
+
+(deftype lamp-hours ()
+  "Number of hours a lamp has been on."
+  `(integer 0 99999))
+
+(deftype lamp-status ()
+  "A cons of (`lamp-hours' . on-p)
+ eg.
+ '(500 . nil)
+
+see `get-lamps'"
+  `(cons lamp-hours (member nil t)))
+
+(defun lamp-status (lamp-hours lamp-on-p)
+  "Create a `lamp-status' from `lamp-hours' and `on-p'"
+  (check-type lamp-hours lamp-hours)
+  (cons lamp-hours (and lamp-on-p t)))
+
+(defun lamp-hours (lamp-status)
+  "Get the `lamp-hours' part of `lamp-status'"
+  (check-type lamp-status lamp-status)
+  (car lamp-status))
+
+(defun lamp-on-p (lamp-status)
+  "Get the `lamp-on-p' part of `lamp-status'"
+  (check-type lamp-status lamp-status)
+  (cdr lamp-status))
+
 (deftype av-mute-status ()
   "Status of the audio-video mute setting on a projector.
 Audio-video mute will cease output of audio or video, without powering off the projector.
@@ -48,7 +91,7 @@ see `set-av-mute'"
 see `get-error-status'
 see `projector-status'
 see `error-status'"
-  '(member  :fan  :lamp  :temperature  :cover-open  :filter  :other))
+  '(member :fan  :lamp  :temperature  :cover-open  :filter  :other))
 
 (deftype error-status ()
   "Status of a component of a projector.
@@ -118,8 +161,8 @@ see `get-error-status'"
     (#\1 :warning)
     (#\2 :error)))
 
-(defun %lamp-str->lamp-infos (lamps-str)
-  "Parses a lamp string into a list of `lamp-info`'s
+(defun %lamp-str->lamp-status (lamps-str)
+  "Parses a lamp string into a list of `lamp-status's
 `lamps-str` should be a string where each lamp is represented by
 
   <Hours> SPC <OnOrOff>
@@ -143,11 +186,11 @@ eg
     :for is-on := (ecase (char lamps-str (1- (incf idx)))
                     (#\0 nil)
                     (#\1 t))
-    :collecting (cons hours is-on)))
+    :collecting (lamp-status hours is-on)))
 
-(defun %inst-str->input-infos (inst-str)
-  "Parses a inst string into a list of `input-info`'s
-`inst-str` should be a string where each input is represented by
+(defun %inst-str->projector-inputs (inst-str)
+  "Parses a inst string into a list of `projector-input's
+`inst-str' should be a string where each input is represented by
 
   <Type><Number>
 
@@ -163,7 +206,7 @@ eg
                       (error "Malformed inst string: '~A'" inst-str))
     :for type := (%input->sym (char inst-str (1- (incf idx))))
     :for number := (parse-integer inst-str :start (1- (incf idx)) :end idx :radix 10)
-    :collecting (cons type number)))
+    :collecting (projector-input type number)))
 
 ;;; Class 1 commands
 
@@ -185,13 +228,13 @@ see `set-port-on', `set-power-off'"
 see `set-input*', `get-input'"
   (%input->string input-type input-number))
 
-(%defpjlink-set set-input* (1 "INPT") (input-info)
+(%defpjlink-set set-input* (1 "INPT") (projector-input)
   "As `set-input' but using a `projector-input' object instead."
-  (%input->string (car input-info) (cdr input-info)))
+  (%input->string (input-type projector-input) (input-number projector-input)))
 
 (%defpjlink-get get-input (1 "INPT") nil (result)
   "Query the current `projector-input' on the projector."
-  (cons
+  (projector-input
    (%input->sym (char result 0))
    (parse-integer result :start 1 :end 2 :radix 10)))
 
@@ -217,11 +260,11 @@ see `set-av-mute'"
 
 (%defpjlink-get get-lamps (1 "LAMP") nil (result)
   "Query the available `projector-lamp's on the projector as a list."
-  (%lamp-str->lamp-infos result))
+  (%lamp-str->lamp-status result))
 
 (%defpjlink-get get-inputs (1 "INST") nil (result)
   "Query the available `projector-input's on the projector as a list."
-  (%inst-str->input-infos result))
+  (%inst-str->projector-inputs result))
 
 (%defpjlink-get get-projector-name (1 "NAME") nil (result)
   "Query the projector's name.
