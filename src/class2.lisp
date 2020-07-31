@@ -513,8 +513,8 @@ This will cause incoming status notifications to alert any registered handlers."
                (ok nil))
           (unwind-protect
                (progn
-                 (setf (car end-thread-fn-ptr) (%make-end-thread-fn running-ptr thread socket address port))
                  (setf thread (%make-listener-thread running-ptr handlers-ptr socket))
+                 (setf (car end-thread-fn-ptr) (%make-end-thread-fn running-ptr thread socket address port))
                  (setf ok t))
             (unless ok
               (setf (car end-thread-fn-ptr) nil)
