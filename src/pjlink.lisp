@@ -218,14 +218,17 @@ And password a sequence of characters length 32 or less."
  This is one with authentication enabled:
   PJLINK 1 01234567<CR>")
 
-(defun %read-line-and-generate-digest (stream password)
-  "Read the initial connection line and figure out the digest to use"
+(defun %auth-handshake (stream password)
+  "Read the initial connection line and output a digest, if necessary."
   (let* ((buffer (make-string +max-connection-response-length+))
          (rlen (%read-pjlink-command-line buffer stream)))
     (declare (dynamic-extent buffer))
-    (%verify-connection-response-and-generate-digest buffer password rlen)))
+    (let ((digest (%verify-connection-response-and-generate-digest buffer password rlen)))
+      (unless (zerop (length digest))
+        (write-sequence digest stream))))
+  (values))
 
-(defmacro %with-pjlink-connection ((stream-var digest-var)
+(defmacro %with-pjlink-connection ((stream-var)
                                    (host
                                     &key
                                       (port +default-port+)
@@ -245,8 +248,8 @@ And password a sequence of characters length 32 or less."
                                              :local-host ,local-host-sym
                                              :local-port ,local-port-sym)))
        (unwind-protect
-            (let* ((,stream-var (usocket:socket-stream ,socket))
-                   (,digest-var (%read-line-and-generate-digest ,stream-var ,password-sym)))
+            (let ((,stream-var (usocket:socket-stream ,socket)))
+              (%auth-handshake ,stream-var ,password-sym)
               ,@body)
          (usocket:socket-close ,socket)))))
 
@@ -312,19 +315,15 @@ And password a sequence of characters length 32 or less."
 ;;;
 
 
-(defun %write-command (stream digest class command &rest params)
-  "Writes a PJLink command to `stream' using `digest', `class', `command', and `params'
+(defun %write-command (stream class command &rest params)
+  "Writes a PJLink command to `stream' using `class', `command', and `params'
  eg.
   %1CLSS ?<Return>"
   (declare (dynamic-extent params))
-  (check-type digest (or (string 0) (string 32)))
   (check-type command (string 4))
   (let ((buf (make-string +max-command-line-length+))
         (len 0))
     (declare (dynamic-extent buf))
-    ;;Prepend the digest (if any)
-    (replace buf digest)
-    (incf len (length digest))
 
     ;;Add %
     (setf (char buf len) #\%)
@@ -357,10 +356,9 @@ And password a sequence of characters length 32 or less."
     (write-sequence buf stream :end len)
     (finish-output stream)))
 
-(defun %pjlink-get (host stream digest class command param)
+(defun %pjlink-get (host stream class command param)
   "Conducts a `get` command on `stream`, and returns the result string
 uses
- `digest' as the authorization digest
  `class' as the command class
  `command' as the command name
  `param' as the command parameter, if any
@@ -371,13 +369,12 @@ This will issue a query such as
 Then given a result of
   %1POWR=0
 returns the string \"0\""
-  (%write-command stream digest class command "?" param)
+  (%write-command stream class command "?" param)
   (%read-response host stream class command param))
 
-(defun %pjlink-set (host stream digest class command param)
+(defun %pjlink-set (host stream class command param)
   "Conducts a `set` command on `stream`, and returns the result string
 uses
- `digest' as the authorization digest
  `class' as the command class
  `command' as the command name
  `param' as the command parameter, if any
@@ -389,7 +386,7 @@ Then given a result of
   %1POWR=OK
 will return no values.
 Will error on error responses such as ERR1, ERRA, ERR3 etc."
-  (%write-command stream digest class command param)
+  (%write-command stream class command param)
   (let ((response (%read-response host stream class command param)))
     (unless (string-equal response "OK")
       (error "set '~A' failed with response '~A'" command response)))
@@ -406,48 +403,43 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
   arguments defined in `input-args' always preceed the host and key args
  `result-var' is the variable holding the result of the get
  `body' is the body of the function, which processes the result."
-  (with-gensyms (args stream digest)
+  (with-gensyms (args stream)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
-      `(defun ,name (,@input-args host-info
-                     &key
-                       (port (port host-info))
-                       (password (password host-info))
-                       (local-host (local-host host-info))
-                       (local-port (local-port host-info))
-                     &aux
-                       (host (host host-info))
-                       (,args ,(if input-transform `(progn ,@transform-body) "")))
+      `(defun ,name (,@input-args host-info &key port password local-host local-port)
          ,@(ensure-list doc)
-         (let ((,result-var
-                 (%with-pjlink-connection (,stream ,digest)
-                     (host :password password :port port :local-host local-host :local-port local-port)
-                   (%pjlink-get host ,stream ,digest ,class ,command ,args))))
+         (let* ((host (host host-info))
+                (port (or port (port host-info)))
+                (password (or password (password host-info)))
+                (local-host (or local-host (local-host host-info)))
+                (local-port (or local-port (local-port host-info)))
+                (,args ,(if input-transform `(progn ,@transform-body) ""))
+                (,result-var
+                  (%with-pjlink-connection (,stream)
+                      (host :password password :port port :local-host local-host :local-port local-port)
+                    (%pjlink-get host ,stream ,class ,command ,args))))
            ,@decl
            ,@body)))))
 
 (defmacro %defpjlink-set (name (class command) args &body body)
-    "Helper macro to create a SET function.
+  "Helper macro to create a SET function.
  `name' is the name of the resulting function
  `class' indicates the class number for the command - eg 1
  `command' is the string designating the command - eg \"POWR\"
  `args' is a list of additional arguments to the function. These always preceed the host and key arguments.
  `body' is the body of the function, which generates the string PJLink parameter to send."
-  (with-gensyms (stream digest)
+  (with-gensyms (stream)
     (multiple-value-bind (body decl doc)
         (parse-body body :documentation t)
-      `(defun ,name (,@args
-                     host-info
-                     &key
-                       (port (port host-info))
-                       (password (password host-info))
-                       (local-host (local-host host-info))
-                       (local-port (local-port host-info))
-                     &aux
-                       (host (host host-info)))
+      `(defun ,name (,@args host-info &key port password local-host local-port)
          ,@(ensure-list doc)
          ,@decl
-         (%with-pjlink-connection (,stream ,digest)
-             (host :password password :port port :local-host local-host :local-port local-port)
-           (%pjlink-set host ,stream ,digest ,class ,command (progn ,@body)))
+         (let ((host (host host-info))
+               (port (or port (port host-info)))
+               (password (or password (password host-info)))
+               (local-host (or local-host (local-host host-info)))
+               (local-port (or local-port (local-port host-info))))
+           (%with-pjlink-connection (,stream)
+               (host :password password :port port :local-host local-host :local-port local-port)
+             (%pjlink-set host ,stream ,class ,command (progn ,@body))))
          (values)))))
