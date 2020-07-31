@@ -350,7 +350,15 @@ use the general broadcast address instead.
                     (when (%validate-search-ack buf len)
                       (let ((mac-address (%parse-search-ack buf)))
                         (cons remote-host mac-address))))))
-            :collect :it)))))
+            :collect it)))))
+
+(defstruct (%ref
+            (:constructor %make-ref (&optional %ref-value))
+            (:conc-name nil)
+            (:copier nil)
+            (:predicate nil))
+  "A 'reference'/'box' to use as indirect value references for eg. finalizing slot values"
+  %ref-value)
 
 (defclass status-listener ()
   ((%lock
@@ -364,12 +372,12 @@ use the general broadcast address instead.
     :type integer
     :initarg :port
     :initform (required-argument :port))
-   (%handlers-ptr
-    :type cons
-    :initform (cons nil nil))
-   (%end-thread-fn-ptr
-    :type cons
-    :initform (cons nil nil))))
+   (%handlers-ref
+    :type %ref
+    :initform (%make-ref nil))
+   (%end-thread-fn-ref
+    :type %ref
+    :initform (%make-ref nil))))
 
 (defun make-status-listener (&key handlers local-host (port +default-port+))
   "Creates a projector status listener listening on `local-host'.
@@ -377,8 +385,7 @@ use the general broadcast address instead.
   these handlers will be initially registered as `add-handler'
 if `handlers' is non-nil, the listener will be started, as per `start-listener'"
   (let* ((handlers (ensure-list handlers))
-         (listener
-            (make-instance 'status-listener :address local-host :port port)))
+         (listener (make-instance 'status-listener :address local-host :port port)))
     (when handlers
       (dolist (h handlers)
         (add-handler listener h))
@@ -387,27 +394,21 @@ if `handlers' is non-nil, the listener will be started, as per `start-listener'"
 
 (defun add-handler (status-listener handler)
   "Add a `status-handler' to `status-listener'."
-  (with-slots (%lock %handlers-ptr)
-      status-listener
+  (with-slots (%lock %handlers-ref) status-listener
     (bt:with-lock-held (%lock)
-      (push handler (car %handlers-ptr))))
+      (push handler (%ref-value %handlers-ref))))
   (values))
 
 (defun remove-handler (status-listener handler)
   "Remove a `status-handler' from a `status-listener'."
-  (with-slots (%lock %handlers-ptr)
-      status-listener
+  (with-slots (%lock %handlers-ref) status-listener
     (bt:with-lock-held (%lock)
-      (setf (car %handlers-ptr) (remove handler (car %handlers-ptr)))))
+      (deletef (%ref-value %handlers-ref) handler)))
   (values))
 
 (defun %notify-handlers (handlers remote-host event-type args)
   (dolist (h handlers)
-    (handler-case
-        (funcall h remote-host event-type args)
-      (error (e)
-        (declare (ignore e))
-        (values)))))
+    (ignore-errors (funcall h remote-host event-type args))))
 
 (defun %parse-lkup-status (buf len)
   (cond
@@ -462,74 +463,69 @@ if `handlers' is non-nil, the listener will be started, as per `start-listener'"
       (t
        (values nil nil)))))
 
-(defun %make-listener-thread (running-ptr handlers-ptr socket)
+(defun %make-listener-thread (running-ref handlers-ref socket)
   (bt:make-thread
    (lambda ()
      (let ((buf (make-string 256)))
        (declare (dynamic-extent buf))
        (loop
-         :while (car running-ptr)
+         :while (%ref-value running-ref)
          :do
-            (handler-case
-                (when-let ((ready (usocket:wait-for-input socket :ready-only t)))
-                  (multiple-value-bind (buf len remote-host remote-port)
-                      (usocket:socket-receive socket buf (length buf) :element-type 'character)
-                    (declare (ignore remote-port))
-                    (multiple-value-bind (event-type args)
-                        (%validate-and-parse-status buf len)
-                      (when event-type
-                        (%notify-handlers (car handlers-ptr) remote-host event-type args)))))
-              (error (e)
-                (declare (ignore e))
-                (values))))))))
+            (ignore-errors
+             (when-let ((ready (usocket:wait-for-input socket :ready-only t)))
+               (multiple-value-bind (buf len remote-host remote-port)
+                   (usocket:socket-receive socket buf (length buf) :element-type 'character)
+                 (declare (ignore remote-port))
+                 (multiple-value-bind (event-type args)
+                     (%validate-and-parse-status buf len)
+                   (when event-type
+                     (%notify-handlers (%ref-value handlers-ref) remote-host event-type args)))))))))))
 
-(defun %make-end-thread-fn (running-ptr thread socket address port)
+(defun %make-end-thread-fn (running-ref thread socket address port)
   (lambda ()
-    (setf (car running-ptr) nil)
+    (setf (%ref-value running-ref) nil)
     ;;hacky hack hack hack to get the wait to finish
-    (usocket:socket-send socket "0" 1 :host (or address "localhost") :port port)
+    (usocket:socket-send socket #.(make-array 1 :element-type '(unsigned-byte 8)) 1 :host (or address "localhost") :port port)
     (when (bt:thread-alive-p thread)
       (bt:join-thread thread))
     (usocket:socket-close socket)))
 
-(defun %make-finalizer (running-ptr socket)
+(defun %make-finalizer (running-ref socket)
   (lambda ()
-    (when (car running-ptr)
-      (setf (car running-ptr) nil)
+    (when (%ref-value running-ref)
+      (setf (%ref-value running-ref) nil)
       (usocket:socket-close socket))))
 
 (defun start-listener (status-listener)
   "Start a `status-listener' if it is not already started.
 This will cause incoming status notifications to alert any registered handlers."
   (bt:with-lock-held ((slot-value status-listener '%lock))
-    (let ((end-thread-fn-ptr (slot-value status-listener '%end-thread-fn-ptr)))
-      (unless (car end-thread-fn-ptr)
+    (let ((end-thread-fn-ref (slot-value status-listener '%end-thread-fn-ref)))
+      (unless (%ref-value end-thread-fn-ref)
         (let* ((address (slot-value status-listener '%address))
                (port (slot-value status-listener '%port))
                (socket (usocket:socket-connect nil nil :protocol :datagram :element-type 'character :local-host address :local-port port))
                (thread nil)
-               (running-ptr (cons t nil))
-               (handlers-ptr (slot-value status-listener '%handlers-ptr))
+               (running-ref (%make-ref t))
+               (handlers-ref (slot-value status-listener '%handlers-ref))
                (ok nil))
-          (unwind-protect
-               (progn
-                 (setf thread (%make-listener-thread running-ptr handlers-ptr socket))
-                 (setf (car end-thread-fn-ptr) (%make-end-thread-fn running-ptr thread socket address port))
-                 (setf ok t))
+          (unwind-protect (setf thread (%make-listener-thread running-ref handlers-ref socket)
+                                (%ref-value end-thread-fn-ref) (%make-end-thread-fn running-ref thread socket address port)
+                                ok t)
             (unless ok
-              (setf (car end-thread-fn-ptr) nil)
+              (setf (%ref-value end-thread-fn-ref) nil)
               (usocket:socket-close socket)))
-          (trivial-garbage:finalize status-listener (%make-finalizer running-ptr socket))))))
+          (trivial-garbage:finalize status-listener (%make-finalizer running-ref socket))))))
   status-listener)
 
 (defun stop-listener (status-listener)
   "Stop a `status-listener' if it is not already stopped.
 This will cease listening for status notification updates."
-  (with-slots (%lock %end-thread-fn-ptr)
+  (with-slots (%lock %end-thread-fn-ref)
       status-listener
     (bt:with-lock-held (%lock)
-      (when (car %end-thread-fn-ptr)
+      (when (%ref-value %end-thread-fn-ref)
         (trivial-garbage:cancel-finalization status-listener)
-        (funcall (car %end-thread-fn-ptr))
-        (setf (car %end-thread-fn-ptr) nil))))
+        (funcall (%ref-value %end-thread-fn-ref))
+        (setf (%ref-value %end-thread-fn-ref) nil))))
   (values))
