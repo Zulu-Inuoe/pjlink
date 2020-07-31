@@ -1,7 +1,7 @@
 (in-package #:cl-user)
 
 (defpackage #:pjlink
-  (:use #:alexandria #:cl)
+  (:use #:cl)
   (:export
    #:+default-port+
    #:+max-password-length+
@@ -100,4 +100,14 @@
    #:add-handler
    #:remove-handler
    #:start-listener
-   #:stop-listener))
+   #:stop-listener)
+  (:import-from
+   #:alexandria
+   #:ensure-list
+   #:deletef
+   #:parse-body
+   #:switch
+   #:eswitch
+   #:required-argument
+   #:when-let
+   #:with-gensyms))
