@@ -114,6 +114,22 @@ eg.
 see `get-error-status'"
   'list)
 
+(defun projector-status (&key fan lamp temperature cover-open filter other)
+  "Create a `projector-status' from each `error-component' `error-status'"
+  (check-type fan error-status)
+  (check-type lamp error-status)
+  (check-type temperature error-status)
+  (check-type cover-open error-status)
+  (check-type filter error-status)
+  (check-type other error-status)
+  (list
+   (cons :fan fan)
+   (cons :lamp lamp)
+   (cons :temperature temperature)
+   (cons :cover-open cover-open)
+   (cons :filter filter)
+   (cons :other other)))
+
 (defun %powr->sym (input-val)
   (ecase input-val
     (#\0 :standby)
@@ -250,13 +266,13 @@ see `set-av-mute'"
 
 (%defpjlink-get get-error-status (1 "ERST") nil (result)
   "Query the `projector-status' projector."
-  (list
-   (cons :fan (%erst->sym (char result 0)))
-   (cons :lamp (%erst->sym (char result 1)))
-   (cons :temperature (%erst->sym (char result 2)))
-   (cons :cover-open (%erst->sym (char result 3)))
-   (cons :filter (%erst->sym (char result 4)))
-   (cons :other (%erst->sym (char result 5)))))
+  (projector-status
+   :fan (%erst->sym (char result 0))
+   :lamp (%erst->sym (char result 1))
+   :temperature (%erst->sym (char result 2))
+   :cover-open (%erst->sym (char result 3))
+   :filter (%erst->sym (char result 4))
+   :other (%erst->sym (char result 5))))
 
 (%defpjlink-get get-lamps (1 "LAMP") nil (result)
   "Query the available `projector-lamp's on the projector as a list."

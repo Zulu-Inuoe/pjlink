@@ -423,13 +423,13 @@ if `handlers' is non-nil, the listener will be started, as per `start-listener'"
   (cond
     ((= len 14)
      (values :erst
-             (list
-              (cons :fan (%erst->sym (char buf 7)))
-              (cons :lamp (%erst->sym (char buf 8)))
-              (cons :temperature (%erst->sym (char buf 9)))
-              (cons :cover-open (%erst->sym (char buf 10)))
-              (cons :filter (%erst->sym (char buf 11)))
-              (cons :other (%erst->sym (char buf 12))))))
+             (projector-status
+              :fan (%erst->sym (char buf 7))
+              :lamp (%erst->sym (char buf 8))
+              :temperature (%erst->sym (char buf 9))
+              :cover-open (%erst->sym (char buf 10))
+              :filter (%erst->sym (char buf 11))
+              :other (%erst->sym (char buf 12)))))
     (t
      (values nil nil))))
 
