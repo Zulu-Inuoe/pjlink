@@ -91,7 +91,7 @@ see `set-av-mute'"
 see `get-error-status'
 see `projector-status'
 see `error-status'"
-  '(member :fan  :lamp  :temperature  :cover-open  :filter  :other))
+  '(member :fan :lamp :temperature :cover-open :filter :other))
 
 (deftype error-status ()
   "Status of a component of a projector.
@@ -216,7 +216,7 @@ eg
 
 (%defpjlink-set power-off (1 "POWR") ()
   "Instruct the projector to power off."
-   "0")
+  "0")
 
 (%defpjlink-get get-power-status (1 "POWR") nil (result)
   "Query the `power-status' of the projector.

@@ -50,7 +50,9 @@ see `get-inputs2'"
 
 see `get-resolution'
 see `get-recommended-resolution'"
-  '(or (cons integer integer) (member :no-signal :unknown-signal)))
+  '(or
+    (cons integer integer)
+    (member :no-signal :unknown-signal)))
 
 (deftype mac-address ()
   "A MAC address as a vector of 6 octets.
@@ -170,7 +172,7 @@ nil if not available."
 (%defpjlink-get get-input-name (2 "INNM")
     ((input-type input-number)
       (%input2->string input-type input-number))
-  (result)
+    (result)
   "Get the input name of the given input type and number
 nil if not available."
   (unless (zerop (length result))
@@ -179,7 +181,7 @@ nil if not available."
 (%defpjlink-get get-input-name* (2 "INNM")
     ((projector-input2)
       (%input2->string (input-type2 projector-input2) (input-number2 projector-input2)))
-  (result)
+    (result)
   "As `get-input-name' but using a `projector-input' or `projector-input2' object instead.
 nil if not available."
   (unless (zerop (length result))
