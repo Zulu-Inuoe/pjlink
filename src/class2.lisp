@@ -405,7 +405,7 @@ if `handlers' is non-nil, the listener will be started, as per `start-listener'"
   "Remove a `status-handler' from a `status-listener'."
   (with-slots (%lock %handlers-ref) status-listener
     (bt:with-lock-held (%lock)
-      (deletef (%ref-value %handlers-ref) handler)))
+      (removef (%ref-value %handlers-ref) handler)))
   (values))
 
 (defun %notify-handlers (handlers remote-host event-type args)

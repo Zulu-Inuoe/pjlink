@@ -104,8 +104,8 @@
   (:import-from
    #:alexandria
    #:ensure-list
-   #:deletef
    #:parse-body
+   #:removef
    #:switch
    #:eswitch
    #:required-argument
