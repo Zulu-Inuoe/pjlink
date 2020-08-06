@@ -313,7 +313,7 @@ When `local-host' is nil, the general broadcast address is used"
 
     (if interface
         (values (ip-interfaces:ip-interface-address interface) (%calculate-broadcast-addr* interface))
-        (values nil #(255 255 255 255)))))
+        (values nil #.(make-array 4 :element-type '(unsigned-byte 8) :initial-element 255)))))
 
 (defun search-projectors (&key local-host (port +default-port+))
   "Performs a PJLink broadcast search.
