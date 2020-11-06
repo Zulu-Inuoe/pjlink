@@ -228,29 +228,27 @@ And password a sequence of characters length 32 or less."
         (write-sequence digest stream))))
   (values))
 
-(defmacro %with-pjlink-connection ((stream-var)
-                                   (host
-                                    &key
-                                      (port +default-port+)
-                                      (password nil)
-                                      (local-host nil)
-                                      (local-port nil))
+(defun %open-pjlink-socket (host port password local-host local-port)
+  "Open a `usocker:socket' on `host' and authenticate if necessary using `password'"
+  (let* ((socket (usocket:socket-connect host port
+                                         :element-type 'character
+                                         :local-host local-host
+                                         :local-port local-port))
+         (success nil))
+     (unwind-protect
+          (let ((stream (usocket:socket-stream socket)))
+            (%auth-handshake stream password)
+            (setf success t)
+            (values socket stream))
+       (unless success
+         (usocket:socket-close socket)))))
+
+(defmacro %with-pjlink-connection ((stream-var host port password local-host local-port)
                                    &body body)
-  (with-gensyms (host-sym port-sym password-sym local-host-sym local-port-sym
-                          socket)
-    `(let* ((,host-sym ,host)
-            (,port-sym ,port)
-            (,password-sym ,password)
-            (,local-host-sym ,local-host)
-            (,local-port-sym ,local-port)
-            (,socket (usocket:socket-connect ,host-sym ,port-sym
-                                             :element-type 'character
-                                             :local-host ,local-host-sym
-                                             :local-port ,local-port-sym)))
-       (unwind-protect
-            (let ((,stream-var (usocket:socket-stream ,socket)))
-              (%auth-handshake ,stream-var ,password-sym)
-              ,@body)
+  (with-gensyms (socket)
+    `(multiple-value-bind (,socket ,stream-var)
+         (%open-pjlink-socket ,host ,port ,password ,local-host ,local-port)
+       (unwind-protect ,(if (null (cdr body)) (car body) `(progn ,@body))
          (usocket:socket-close ,socket)))))
 
 (defconstant +max-command-line-length+ (+ 1 1 4 1 128 1)
@@ -415,8 +413,7 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
                 (local-port (or local-port (local-port host-info)))
                 (,args ,(if input-transform `(progn ,@transform-body) ""))
                 (,result-var
-                  (%with-pjlink-connection (,stream)
-                      (host :password password :port port :local-host local-host :local-port local-port)
+                  (%with-pjlink-connection (,stream host port password local-host local-port)
                     (%pjlink-get host ,stream ,class ,command ,args))))
            ,@decl
            ,@body)))))
@@ -439,7 +436,6 @@ Will error on error responses such as ERR1, ERRA, ERR3 etc."
                (password (or password (password host-info)))
                (local-host (or local-host (local-host host-info)))
                (local-port (or local-port (local-port host-info))))
-           (%with-pjlink-connection (,stream)
-               (host :password password :port port :local-host local-host :local-port local-port)
-             (%pjlink-set host ,stream ,class ,command (progn ,@body))))
+           (%with-pjlink-connection (,stream host port password local-host local-port)
+             (%pjlink-set host ,stream ,class ,command ,(if (null (cdr body)) (car body) `(progn ,@body)))))
          (values)))))
